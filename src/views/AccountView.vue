@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '@/api'
+import api, { apiMode } from '@/api'
 import { ROLE, ROLE_LABEL } from '@/constants/roles'
 import { CONFIRM_TITLE } from '@/constants/nav'
 
@@ -56,11 +56,12 @@ async function handleSubmit() {
     ElMessage.warning('请填写用户名与姓名')
     return
   }
+  if (apiMode === 'hybrid' && !await confirmAction(dialogMode.value === 'create' || form.value.dataSource === 'real-local' ? '此操作将写入真实后端账户，确认继续？' : '此操作仅修改演示账户，确认继续？')) return
   saving.value = true
   try {
     if (dialogMode.value === 'create') {
-      await api.createAccount({ ...form.value })
-      ElMessage.success('账户已创建')
+      const created = await api.createAccount({ ...form.value })
+      ElMessage.success(apiMode === 'hybrid' && created.remoteId == null ? '后端已确认创建，但未返回账户 ID；暂不能编辑该记录' : '账户已创建')
     } else {
       await api.updateAccount(form.value.id, {
         displayName: form.value.displayName,
@@ -100,9 +101,9 @@ async function confirmAction(message, options = {}) {
 async function toggleEnabled(row) {
   const next = !row.enabled
   const ok = await confirmAction(
-    next
+    sourcePrefix(row) + (next
       ? `确认启用账户「${row.username}」？`
-      : `确认禁用账户「${row.username}」？禁用后该账户不可登录，其历史操作记录保留。`
+      : `确认禁用账户「${row.username}」？禁用后该账户不可登录，其历史操作记录保留。`)
   )
   if (!ok) return
   try {
@@ -123,7 +124,7 @@ async function toggleEnabled(row) {
 
 async function handleDelete(row) {
   const ok = await confirmAction(
-    `确认删除账户「${row.username}」？该操作将记入审计。`,
+    sourcePrefix(row) + `确认删除账户「${row.username}」？`,
     { confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' }
   )
   if (!ok) return
@@ -138,7 +139,7 @@ async function handleDelete(row) {
 
 async function handleResetPassword(row) {
   const ok = await confirmAction(
-    `确认重置账户「${row.username}」的密码？该操作将记入审计。`
+    sourcePrefix(row) + `确认重置账户「${row.username}」的密码？`
   )
   if (!ok) return
   try {
@@ -149,6 +150,8 @@ async function handleResetPassword(row) {
   }
 }
 
+const sourcePrefix = row => apiMode !== 'hybrid' ? '' : row.dataSource === 'mock' ? '【仅演示】' : '【真实后端】'
+const cannotOperate = row => apiMode === 'hybrid' && row.dataSource === 'real-local' && row.remoteId == null
 onMounted(load)
 </script>
 
@@ -178,6 +181,9 @@ onMounted(load)
       </div>
 
       <el-table :data="rows" v-loading="loading" border style="width: 100%">
+        <el-table-column v-if="apiMode === 'hybrid'" label="数据来源" width="185">
+          <template #default="{ row }"><el-tag :type="row.dataSource === 'mock' ? 'info' : 'warning'">{{ row.dataSource === 'mock' ? 'Mock 演示' : row.remoteId == null ? '真实创建 · 缺少 ID' : '真实创建 · 本地记录' }}</el-tag></template>
+        </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="140" />
         <el-table-column prop="displayName" label="姓名" min-width="120" />
         <el-table-column label="角色" width="110">
@@ -194,12 +200,12 @@ onMounted(load)
         <el-table-column prop="lastLoginAt" label="最近登录" width="170" />
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="primary" @click="toggleEnabled(row)">
+            <el-button link type="primary" :disabled="cannotOperate(row)" @click="openEdit(row)">编辑</el-button>
+            <el-button link type="primary" :disabled="cannotOperate(row)" @click="toggleEnabled(row)">
               {{ row.enabled ? '禁用' : '启用' }}
             </el-button>
-            <el-button link type="primary" @click="handleResetPassword(row)">重置密码</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" :disabled="cannotOperate(row)" @click="handleResetPassword(row)">重置密码</el-button>
+            <el-button link type="danger" :disabled="cannotOperate(row)" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

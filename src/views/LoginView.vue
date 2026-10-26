@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { APP_NAME } from '@/constants/nav'
+import { apiMode } from '@/api'
 
 const title = APP_NAME
 const subtitle = '请使用控制台账户登录'
@@ -62,7 +63,8 @@ async function handleSubmit() {
         </el-button>
       </el-form>
 
-      <p class="hint">演示账户：admin / admin123（管理员）；ops.zhang / ops123（运维员）</p>
+      <p v-if="apiMode === 'mock'" class="hint">演示账户：admin / admin123（管理员）；ops.zhang / ops123（运维员）</p>
+      <p v-else class="hint">混合接入预览：请使用后端真实账户登录。缺少接口的功能会标明演示数据；刷新后需重新登录。</p>
     </el-card>
   </div>
 </template>

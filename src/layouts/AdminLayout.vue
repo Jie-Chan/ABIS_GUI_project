@@ -1,7 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
+import { apiMode } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_LABEL } from '@/constants/roles'
 import { NAV_ITEMS, APP_NAME } from '@/constants/nav'
@@ -20,7 +21,14 @@ const logoutLabel = '退出登录'
 const navItems = computed(() => NAV_ITEMS.filter((item) => auth.hasPermission(item.permission)))
 
 const currentTitle = computed(() => route.meta.title || '')
-const roleLabel = computed(() => ROLE_LABEL[auth.role] || auth.role)
+const roleLabel = computed(() => ROLE_LABEL[auth.role] || '角色待后端提供')
+const sourceNote = computed(() => ({
+  monitor: '监控数据来自真实接口。',
+  threshold: '阈值读取与保存均为真实操作。',
+  accounts: '列表为演示账户及本次真实创建记录；演示行只操作 mock，真实行按后端 ID 操作。本次创建记录刷新后不保留，不代表服务器完整账户列表。',
+  logs: '列表来自真实接口；导出 CSV 仍为独立 mock 样本，不是当前真实列表。筛选参数已发送，实际支持情况待联调。',
+  audits: '列表来自真实接口；导出 CSV 仍为独立 mock 样本，不是当前真实列表。筛选参数已发送，实际支持情况待联调。',
+}[route.name] || ''))
 const displayName = computed(() => auth.account?.displayName || auth.account?.username || '')
 
 async function handleLogout() {
@@ -35,8 +43,9 @@ async function handleLogout() {
     // 功能没坏，但「取消」是常规操作，不该产生错误 —— 直接 return 即可。
     return
   }
-  await auth.logout()
-  router.push({ name: 'login' })
+  try { await auth.logout() }
+  catch (e) { ElMessage.warning(`本地已退出，服务端注销未确认：${e.message}`) }
+  finally { router.push({ name: 'login' }) }
 }
 </script>
 
@@ -61,6 +70,8 @@ async function handleLogout() {
       </el-header>
 
       <el-main>
+        <el-alert v-if="apiMode === 'hybrid'" title="混合接入预览" :description="sourceNote" type="warning" :closable="false" style="margin-bottom: 12px" />
+        <el-alert v-if="apiMode === 'hybrid' && auth.account?.identityPending" title="后端未返回可识别角色，当前开放预览导航；真实操作仍由后端鉴权。刷新页面需重新登录。" type="info" :closable="false" style="margin-bottom: 12px" />
         <router-view />
       </el-main>
     </el-container>

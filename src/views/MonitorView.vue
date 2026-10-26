@@ -48,7 +48,8 @@ onUnmounted(() => store.stop())
           <el-tag v-if="abnormalCount > 0" type="danger" size="small" style="margin-left: 8px">
             {{ abnormalCount }} 项异常
           </el-tag>
-          <el-tag v-else type="success" size="small" style="margin-left: 8px">全部正常</el-tag>
+          <el-tag v-else-if="store.items.length && !store.error" type="success" size="small" style="margin-left: 8px">全部正常</el-tag>
+          <el-tag v-else type="info">状态待确认</el-tag>
         </span>
         <span class="meta">
           上次刷新：{{ store.fetchedAt || '—' }}
@@ -77,7 +78,7 @@ onUnmounted(() => store.stop())
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="expand">
-              <p v-if="row.instances.length === 0" class="muted">该对象未部署，无实例。</p>
+              <p v-if="row.instances.length === 0" class="muted">{{ row.status === 'not_deployed' ? '该对象未部署，无实例。' : '暂无实例明细' }}</p>
               <el-tag
                 v-for="inst in row.instances"
                 :key="inst.id"
@@ -110,13 +111,13 @@ onUnmounted(() => store.stop())
           <template #default="{ row }">
             <template v-if="row.metrics">
               <el-tag :type="row.metrics.cdcHealthy ? 'success' : 'danger'" size="small" style="margin-right: 6px">
-                {{ algoMetricLabel[ALGO_METRIC.CDC_HEALTHY] }}：{{ row.metrics.cdcHealthy ? '正常' : '异常' }}
+                {{ algoMetricLabel[ALGO_METRIC.CDC_HEALTHY] }}：{{ row.metrics.cdcHealthy == null ? '未知' : row.metrics.cdcHealthy ? '正常' : '异常' }}
               </el-tag>
               <el-tag :type="row.metrics.cdcReady ? 'success' : 'danger'" size="small" style="margin-right: 6px">
-                {{ algoMetricLabel[ALGO_METRIC.CDC_READY] }}：{{ row.metrics.cdcReady ? '就绪' : '未就绪' }}
+                {{ algoMetricLabel[ALGO_METRIC.CDC_READY] }}：{{ row.metrics.cdcReady == null ? '未知' : row.metrics.cdcReady ? '就绪' : '未就绪' }}
               </el-tag>
               <el-tag size="small" style="margin-right: 6px">
-                {{ algoMetricLabel[ALGO_METRIC.GALLERY_TOTAL_SIZE] }}：{{ row.metrics.galleryTotalSize.toLocaleString() }}
+                {{ algoMetricLabel[ALGO_METRIC.GALLERY_TOTAL_SIZE] }}：{{ row.metrics.galleryTotalSize?.toLocaleString() ?? '未知' }}
               </el-tag>
               <el-tag :type="row.metrics.licenseStatus === LICENSE_STATUS.VALID ? 'success' : 'danger'" size="small">
                 {{ algoMetricLabel[ALGO_METRIC.LICENSE_STATUS] }}：{{ row.metrics.licenseStatus }}

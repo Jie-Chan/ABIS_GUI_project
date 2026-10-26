@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '@/api'
+import api, { apiMode } from '@/api'
 import { CONFIRM_TITLE } from '@/constants/nav'
 import {
   THRESHOLD_MIN,
@@ -106,7 +106,7 @@ async function handleSave() {
     form.value = { ...result }
     origin.value = { ...result }
     // 需求 1.2：界面应提示变更的生效延迟
-    ElMessage.success('阈值已保存。变更将在各实例下次轮询后生效，最长约 1 分钟。')
+    ElMessage.success(apiMode === 'hybrid' ? '后端已保存阈值，实际实例生效时间待确认。' : '阈值已保存。变更将在各实例下次轮询后生效，最长约 1 分钟。')
   } catch (e) {
     ElMessage.error(e.message || '保存失败')
   } finally {

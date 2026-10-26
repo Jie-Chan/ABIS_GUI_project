@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:hybrid": "vite --mode hybrid",
+    "build:hybrid": "vite build --mode hybrid",
+    "preview:hybrid": "vite preview --mode hybrid",
+    "test": "node --test tests/*.test.js",
     "build": "vite build",
     "preview": "vite preview"
   },

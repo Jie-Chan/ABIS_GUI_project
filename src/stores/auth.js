@@ -4,20 +4,22 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import api from '@/api'
+import api, { apiMode } from '@/api'
 import { hasPermission as checkPermission } from '@/constants/roles'
 
 const TOKEN_KEY = 'abis_console_token'
 
 export const useAuthStore = defineStore('auth', () => {
   const account = ref(null)
-  const token = ref(localStorage.getItem(TOKEN_KEY) || '')
+  const token = ref(apiMode === 'hybrid' ? '' : localStorage.getItem(TOKEN_KEY) || '')
 
   const isLoggedIn = computed(() => !!account.value)
   const role = computed(() => account.value?.role || '')
 
   /** 判断当前账户是否具备某权限（仅用于界面可见性，非安全边界） */
   function hasPermission(permission) {
+    // 混合预览仅开放导航，不授予后端权限；实际写入由后端鉴权。
+    if (apiMode === 'hybrid' && account.value?.identityPending) return true
     return checkPermission(role.value, permission)
   }
 
@@ -25,7 +27,8 @@ export const useAuthStore = defineStore('auth', () => {
     const result = await api.login(username, password)
     account.value = result.account
     token.value = result.token
-    localStorage.setItem(TOKEN_KEY, result.token)
+    if (apiMode === 'hybrid') sessionStorage.setItem('abis_remote_token', result.token)
+    else localStorage.setItem(TOKEN_KEY, result.token)
     return result
   }
 
@@ -36,8 +39,16 @@ export const useAuthStore = defineStore('auth', () => {
       account.value = null
       token.value = ''
       localStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem('abis_remote_token')
     }
   }
+
+  if (apiMode === 'hybrid') window.addEventListener('abis-session-expired', () => {
+    account.value = null
+    token.value = ''
+    sessionStorage.removeItem('abis_remote_token')
+    window.location.assign('/login')
+  })
 
   return { account, token, isLoggedIn, role, login, logout, hasPermission }
 })

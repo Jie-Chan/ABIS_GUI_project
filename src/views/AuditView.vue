@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import api from '@/api'
+import api, { apiMode } from '@/api'
 import {
   downloadBlob,
   timestampedName,
@@ -68,7 +68,7 @@ async function handleExport() {
   exporting.value = true
   try {
     const blob = await api.exportAudits(query.value)
-    downloadBlob(blob, timestampedName('abis_audit'))
+    downloadBlob(blob, timestampedName(apiMode === 'hybrid' ? 'MOCK_abis_audit' : 'abis_audit'))
     ElMessage.success(EXPORT_STARTED_MESSAGE)
   } catch (e) {
     ElMessage.error(e.message || EXPORT_FAILED_MESSAGE)
@@ -120,7 +120,7 @@ onMounted(load)
         <el-form-item>
           <el-button type="primary" @click="load">查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
-          <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
+          <el-button :loading="exporting" @click="handleExport">{{ apiMode === 'hybrid' ? '导出 Mock 样本 CSV' : '导出 CSV' }}</el-button>
         </el-form-item>
       </el-form>
 

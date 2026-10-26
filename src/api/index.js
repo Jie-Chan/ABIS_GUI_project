@@ -6,17 +6,21 @@
  */
 import mockAdapter from './adapters/mock'
 import httpAdapter from './adapters/http'
+import liveAdapter from './adapters/live.js'
+import { createHybrid } from './adapters/hybrid.js'
 
 /**
  * 默认走 mock。
  * 只有显式设为 'false' 时才走真实 HTTP —— 契约未冻结时不会误连。
  */
-const useMock = import.meta.env.VITE_USE_MOCK !== 'false'
+export const apiMode = import.meta.env.VITE_API_MODE || (import.meta.env.VITE_USE_MOCK === 'false' ? 'http' : 'mock')
+if (!['mock', 'http', 'hybrid'].includes(apiMode)) throw new Error('VITE_API_MODE 必须为 mock、http 或 hybrid')
+const useMock = apiMode === 'mock'
 
-const adapter = useMock ? mockAdapter : httpAdapter
+const adapter = useMock ? mockAdapter : apiMode === 'hybrid' ? createHybrid(liveAdapter, mockAdapter) : httpAdapter
 
 if (import.meta.env.DEV) {
-  console.info(`[api] 当前适配器：${useMock ? 'mock' : 'http'}`)
+  console.info(`[api] 当前适配器：${apiMode}`)
 }
 
 export default adapter
