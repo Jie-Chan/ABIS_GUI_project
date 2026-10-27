@@ -121,7 +121,7 @@ onMounted(load)
   <div>
     <el-card v-loading="loading">
       <template #header>
-        <span>{{ title }}</span>
+        <div class="record-heading"><span>{{ title }}</span><el-tag type="info" size="small">1:N 去重</el-tag></div>
       </template>
 
       <el-alert
@@ -141,8 +141,8 @@ onMounted(load)
         style="margin-bottom: 12px"
       />
 
-      <el-form label-width="200px" style="max-width: 560px">
-        <el-form-item v-for="k in THRESHOLD_KEYS" :key="k.key" :label="k.label">
+      <el-form label-position="top" class="threshold-form">
+        <el-form-item v-for="k in THRESHOLD_KEYS" :key="k.key" :label="k.label" class="threshold-field">
           <el-input-number
             v-model="form[k.key]"
             :min="THRESHOLD_MIN"
@@ -153,7 +153,7 @@ onMounted(load)
           <span class="bound">协议生效下限：{{ k.protocolLowerBound }}</span>
         </el-form-item>
 
-        <el-form-item>
+        <el-form-item class="threshold-actions">
           <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
           <el-button @click="load">重置</el-button>
         </el-form-item>
@@ -168,6 +168,15 @@ onMounted(load)
 </template>
 
 <style scoped>
-.bound { margin-left: 12px; color: #909399; font-size: 12px; }
-.note { margin: 8px 0 0; color: #909399; font-size: 12px; line-height: 1.7; }
+.threshold-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; max-width: 860px; }
+.threshold-field { padding: 22px; margin: 0; background: #f7f9fc; border: 1px solid var(--abis-border); border-radius: 8px; }
+.threshold-field :deep(.el-form-item__label) { margin-bottom: 18px; color: #3f526e; font-size: 13px; }
+.threshold-field :deep(.el-form-item__content) { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.threshold-field :deep(.el-input-number) { width: 180px; max-width: 100%; }
+.threshold-field :deep(.el-input__inner) { font-size: 20px; font-weight: 600; }
+.threshold-field :deep(.el-input__wrapper) { height: 44px; }
+.bound { color: #718096; font-size: 11px; }
+.threshold-actions { grid-column: 1 / -1; margin-bottom: 0; }
+.note { margin: 24px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
+@media (max-width: 900px) { .threshold-form { grid-template-columns: 1fr; } }
 </style>

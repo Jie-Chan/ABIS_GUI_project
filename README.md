@@ -9,6 +9,22 @@ npm install
 npm run dev
 ```
 
+## Mock 界面预览（2026-10-26）
+
+`front-end` 分支已按确认的示意图实现第一版界面：深蓝导航、浅色工作区、监控状态概览和双栏登录页，并统一账户、阈值、日志及审计页面的展示样式。
+
+```bash
+npm run dev:mock -- --port 5174
+```
+
+此命令使用 `.env.demo` 的 Mock 配置。演示登录：`admin / admin123`（管理员）、`ops.zhang / ops123`（运维员）。页面持续显示数据来源；切换到 HTTP 模式时，登录页隐藏演示凭据。
+
+构建与预览：`npm run build:mock`，再运行 `npm run preview:mock`。
+
+接口调用、store 对外契约、路由权限、校验与提交处理保持原样。新增监控统计由已有快照计算，不修改 Mock 样本或接口结构。
+
+[界面截图与验证记录](docs/2026-10-26-界面预览.md)
+
 ## mock 与真实接口的切换
 
 编辑 `.env.development`：
@@ -28,9 +44,8 @@ Vite 的 env 加载规则是：`npm run build` 以 `mode=production` 运行，**
 于是生产构建里 `VITE_USE_MOCK` 是 `undefined`，而 `src/api/index.js` 的取值逻辑是
 「非 `'false'` 即视为 mock」，结果落到 mock。
 
-**这个失败不报错、不报警**：产物照常登录、照常有数据、界面上没有任何异常迹象，但全是假数据，
-而且演示凭据（`admin`/`admin123`、`ops.zhang`/`ops123`）已经被编进 JS 里，谁都能用它登进去。
-它长得和正常一模一样，所以最难发现。
+当前界面会明确显示「Mock 演示数据」，但构建命令本身不会因为使用 Mock 而失败。
+Mock 产物使用演示凭据（`admin`/`admin123`、`ops.zhang`/`ops123`），数据来源提示不会将它转换为真实认证。
 
 契约冻结、准备交付时：
 

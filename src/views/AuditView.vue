@@ -83,7 +83,9 @@ onMounted(load)
 <template>
   <div>
     <el-card>
-      <template #header><span>{{ title }}</span></template>
+      <template #header>
+        <div class="record-heading"><span>{{ title }}</span><span class="record-count">共 {{ total }} 条审计记录</span></div>
+      </template>
 
       <el-alert
         v-if="error"
@@ -179,6 +181,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.filters { margin-bottom: 4px; }
-.note { margin: 12px 0 0; color: #909399; font-size: 12px; line-height: 1.7; }
+.note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
 </style>

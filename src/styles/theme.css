@@ -1,0 +1,89 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  color: #202d42;
+  background: #f4f6fa;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  --abis-navy: #17263c;
+  --abis-muted: #718096;
+  --abis-border: #e5eaf2;
+  --el-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --el-color-primary: #3268e8;
+  --el-color-primary-light-3: #7095ef;
+  --el-color-primary-light-5: #99b4f4;
+  --el-color-primary-light-7: #c2d2f8;
+  --el-color-primary-light-8: #d6e1fb;
+  --el-color-primary-light-9: #ebf0fd;
+  --el-color-primary-dark-2: #2853ba;
+  --el-color-success: #159d68;
+  --el-color-success-light-9: #edf9f2;
+  --el-color-danger: #dc4c52;
+  --el-color-danger-light-9: #fff0f0;
+  --el-color-warning: #bc791d;
+  --el-text-color-primary: #202d42;
+  --el-text-color-regular: #4e5e75;
+  --el-text-color-secondary: #718096;
+  --el-text-color-placeholder: #8c99ac;
+  --el-border-color: #dce3ed;
+  --el-border-color-light: #e5eaf2;
+  --el-border-color-lighter: #edf0f6;
+  --el-fill-color-light: #f5f7fb;
+  --el-border-radius-base: 6px;
+  --el-box-shadow-light: 0 4px 18px rgb(26 48 81 / 4%);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 3px solid #89aaf5; outline-offset: 3px; }
+h1, h2, h3, p { overflow-wrap: anywhere; }
+.el-button { font-weight: 500; min-height: 36px; padding: 9px 16px; }
+.el-button.is-link { min-height: 28px; padding: 2px 0; }
+.el-button .ui-icon { margin-right: 7px; }
+.el-input__wrapper, .el-select__wrapper { min-height: 36px; }
+.el-tag { border-color: transparent; font-weight: 500; }
+.el-alert { border-radius: 6px; }
+.el-alert__title { line-height: 1.7; }
+
+.abis-shell .el-card { border: 1px solid var(--abis-border); border-radius: 8px; box-shadow: 0 2px 8px rgb(26 48 81 / 2%); }
+.abis-shell .el-card__header { padding: 20px 24px; font-weight: 600; font-size: 16px; border-color: var(--abis-border); }
+.abis-shell .el-card__body { padding: 24px; }
+.abis-shell .el-table { --el-table-header-bg-color: #f5f7fb; --el-table-header-text-color: #65748c; --el-table-border-color: #e9edf4; --el-table-row-hover-bg-color: #f7f9fd; color: #28394f; font-size: 13px; }
+.abis-shell .el-table th.el-table__cell { height: 46px; font-size: 12px; font-weight: 600; }
+.abis-shell .el-table td.el-table__cell { padding: 14px 0; }
+.abis-shell .el-table .cell { padding-left: 16px; padding-right: 16px; }
+.abis-shell .el-table--border::after, .abis-shell .el-table--border::before { display: none; }
+.abis-shell .el-table--border .el-table__cell { border-right: none; }
+.abis-shell .el-table__empty-block { min-height: 160px; }
+.abis-shell .el-pagination { flex-wrap: wrap; row-gap: 10px; --el-pagination-button-bg-color: transparent; }
+.abis-shell .note { padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--abis-border); color: #718096; font-size: 12px; line-height: 1.8; }
+.abis-shell .toolbar { flex-wrap: wrap; row-gap: 12px; }
+.abis-shell .filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 0 20px; margin-bottom: 20px; padding: 0 0 6px; border-bottom: 1px solid var(--abis-border); }
+.abis-shell .filters .el-form-item { display: flex; flex-direction: column; align-items: stretch; margin-right: 0; margin-bottom: 18px; max-width: 100%; }
+.abis-shell .filters .el-form-item__label { justify-content: flex-start; height: auto; margin-bottom: 6px; padding: 0; color: #65748c; font-size: 12px; line-height: 20px; }
+.abis-shell .filters .el-form-item__content { min-width: 0; }
+.abis-shell .filters .el-date-editor { max-width: 100%; }
+.record-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.record-count { color: #718096; font-size: 12px; font-weight: 400; white-space: nowrap; }
+.el-dialog { max-width: calc(100vw - 32px); padding: 24px; border-radius: 10px; }
+.el-dialog__header { margin-bottom: 12px; }
+.el-dialog__title, .el-message-box__title { font-weight: 600; }
+.el-dialog__body .el-descriptions__label { width: 120px; }
+.el-dialog__body .el-descriptions__content { overflow-wrap: anywhere; }
+.el-message-box { max-width: calc(100vw - 32px); border-radius: 10px; padding: 20px; }
+
+@media (max-width: 767px) {
+  .abis-shell .el-card__body { padding: 16px; }
+  .abis-shell .el-card__header { padding: 16px; }
+  .abis-shell .filters { gap: 0 12px; }
+  .abis-shell .filters .el-form-item:first-child { width: 100%; }
+  .abis-shell .filters .el-date-editor { width: 100%; }
+  .abis-shell .el-pagination { justify-content: flex-start !important; }
+  .abis-shell .toolbar .spacer { display: none; }
+  .el-pagination__sizes { margin-right: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

@@ -155,6 +155,9 @@ onMounted(load)
 <template>
   <div>
     <el-card>
+      <template #header>
+        <div class="record-heading"><span>控制台账户</span><span class="record-count">共 {{ total }} 个账户</span></div>
+      </template>
       <el-alert
         v-if="error"
         :title="error"
@@ -243,7 +246,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .spacer { flex: 1; }
-.note { margin: 12px 0 0; color: #909399; font-size: 12px; }
+.note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
 </style>
