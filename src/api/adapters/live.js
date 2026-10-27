@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { createRemote } from './remote.js'
+import { createRemote, responseMessage } from './remote.js'
 
 const http = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || '/admin-api', timeout: 15000 })
 http.interceptors.request.use(config => {
@@ -10,10 +10,10 @@ http.interceptors.request.use(config => {
 export default createRemote(async config => {
   try {
     const response = await http.request(config)
-    if (Number(response.data?.code) === 401) window.dispatchEvent(new Event('abis-session-expired'))
+    if (config.url !== '/system/auth/login' && Number(response.data?.code) === 401) window.dispatchEvent(new Event('abis-session-expired'))
     return response.data
   } catch (e) {
-    if (e.response?.status === 401) window.dispatchEvent(new Event('abis-session-expired'))
-    throw new Error(e.response?.data?.msg || (e.code === 'ECONNABORTED' ? '真实接口请求超时，请检查后端连接' : e.message || '真实接口请求失败'))
+    if (config.url !== '/system/auth/login' && e.response?.status === 401) window.dispatchEvent(new Event('abis-session-expired'))
+    throw new Error(responseMessage(e.response?.data) || (e.code === 'ECONNABORTED' ? '真实接口请求超时，请检查后端连接' : e.response ? `真实接口请求失败（HTTP ${e.response.status}）` : e.message || '真实接口请求失败'))
   }
 })

@@ -23,7 +23,7 @@ export const CONFIRM_TITLE = '二次确认'
 export const NAV_ITEMS = [
   { name: 'monitor',   label: '服务状态监控', permission: PERMISSION.MONITOR_VIEW,   component: () => import('@/views/MonitorView.vue') },
   { name: 'threshold', label: '匹配阈值配置', permission: PERMISSION.THRESHOLD_EDIT, component: () => import('@/views/ThresholdView.vue') },
-  { name: 'accounts',  label: '账户管理',     permission: PERMISSION.ACCOUNT_MANAGE, component: () => import('@/views/AccountView.vue') },
+  { name: 'accounts',  label: '账户管理',     permission: PERMISSION.ACCOUNT_VIEW, component: () => import('@/views/AccountView.vue') },
   { name: 'logs',      label: '日志查询',     permission: PERMISSION.LOG_VIEW,       component: () => import('@/views/LogView.vue') },
   { name: 'audits',    label: '审计查询',     permission: PERMISSION.AUDIT_VIEW,     component: () => import('@/views/AuditView.vue') },
 ]

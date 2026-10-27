@@ -16,7 +16,7 @@ const logoutLabel = '退出登录'
 
 /**
  * 导航项按权限过滤 —— 需求 1.1 权限矩阵，取自 NAV_ITEMS（唯一来源）。
- * 运维员看不到「匹配阈值修改」与「账户管理」。
+ * 运维员可进入账户列表，写操作在账户页按职责区分。
  */
 const navItems = computed(() => NAV_ITEMS.filter((item) => auth.hasPermission(item.permission)))
 
@@ -25,7 +25,7 @@ const roleLabel = computed(() => ROLE_LABEL[auth.role] || '角色待后端提供
 const sourceNote = computed(() => ({
   monitor: '监控数据来自真实接口。',
   threshold: '阈值读取与保存均为真实操作。',
-  accounts: '列表为演示账户及本次真实创建记录；演示行只操作 mock，真实行按后端 ID 操作。本次创建记录刷新后不保留，不代表服务器完整账户列表。',
+  accounts: '账户列表及账户操作均连接真实服务。当前支持用户名、姓名搜索；初始密码和重置密码的交付方式仍需后端确认。',
   logs: '列表来自真实接口；导出 CSV 仍为独立 mock 样本，不是当前真实列表。筛选参数已发送，实际支持情况待联调。',
   audits: '列表来自真实接口；导出 CSV 仍为独立 mock 样本，不是当前真实列表。筛选参数已发送，实际支持情况待联调。',
 }[route.name] || ''))
@@ -71,7 +71,7 @@ async function handleLogout() {
 
       <el-main>
         <el-alert v-if="apiMode === 'hybrid'" title="混合接入预览" :description="sourceNote" type="warning" :closable="false" style="margin-bottom: 12px" />
-        <el-alert v-if="apiMode === 'hybrid' && auth.account?.identityPending" title="后端未返回可识别角色，当前开放预览导航；真实操作仍由后端鉴权。刷新页面需重新登录。" type="info" :closable="false" style="margin-bottom: 12px" />
+        <el-alert v-if="apiMode === 'hybrid' && auth.account?.identityPending" title="后端未返回可识别角色，当前仅开放读取预览。" type="info" :closable="false" style="margin-bottom: 12px" />
         <router-view />
       </el-main>
     </el-container>

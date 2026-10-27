@@ -1,8 +1,8 @@
 /**
- * 管理 API 契约 —— 前端侧唯一真源
+ * 管理 API 前端接口参考
  *
- * 本文件用 JSDoc 描述每个接口的入参与返回。两个适配器
- * （adapters/mock.js 与 adapters/http.js）都必须实现这里的签名。
+ * JSDoc 描述页面使用的入参与返回；真实路径和报文转换见 remote.js，
+ * 账户开发约定及后端实现状态见 docs/2026-10-27-账户管理后端接口草案v1.md。
  *
  * ⚠ 全部 15 个方法的路径与报文字段**尚未冻结**。
  *   建议路径见《设计方案》§8，最终以 ABIS 侧冻结结果为准。
@@ -12,13 +12,13 @@
 
 /**
  * @typedef {Object} Account
- * @property {number} id
+ * @property {string|number} id
  * @property {string} username
  * @property {string} displayName
  * @property {'admin'|'operator'} role
  * @property {boolean} enabled
- * @property {string} createdAt
- * @property {string} lastLoginAt
+ * @property {string|null} createdAt
+ * @property {string|null} lastLoginAt
  */
 
 /**
@@ -115,10 +115,10 @@
  * @property {() => Promise<void>} logout
  * @property {() => Promise<{account: Account}|null>} getSession
  * @property {(params?: PageParams & {keyword?: string}) => Promise<{total: number, items: Account[]}>} listAccounts
- * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator'}) => Promise<Account>} createAccount
- * @property {(id: number, payload: Partial<Account>) => Promise<Account>} updateAccount
- * @property {(id: number) => Promise<void>} deleteAccount
- * @property {(id: number) => Promise<void>} resetPassword
+ * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator'}) => Promise<Account|Object|boolean>} createAccount
+ * @property {(id: string|number, payload: {displayName?: string, role?: string, enabled?: boolean}) => Promise<Account|boolean>} updateAccount
+ * @property {(id: string|number) => Promise<void|boolean>} deleteAccount
+ * @property {(id: string|number) => Promise<Object|void|boolean>} resetPassword
  * @property {() => Promise<{face: number, finger: number}>} getThresholds
  * @property {(payload: {face?: number, finger?: number}) => Promise<{face: number, finger: number}>} updateThresholds
  * @property {() => Promise<{items: MonitorItem[], fetchedAt: string}>} getHealth

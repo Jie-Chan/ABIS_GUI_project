@@ -64,7 +64,7 @@ async function handleSubmit() {
       </el-form>
 
       <p v-if="apiMode === 'mock'" class="hint">演示账户：admin / admin123（管理员）；ops.zhang / ops123（运维员）</p>
-      <p v-else class="hint">混合接入预览：请使用后端真实账户登录。缺少接口的功能会标明演示数据；刷新后需重新登录。</p>
+      <p v-else class="hint">混合接入预览：请使用后端真实账户登录。有效会话可在当前浏览器标签页刷新后恢复；演示功能会标明数据来源。</p>
     </el-card>
   </div>
 </template>
