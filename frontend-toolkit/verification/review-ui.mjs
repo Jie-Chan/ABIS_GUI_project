@@ -47,6 +47,37 @@ const openLogout=async()=>{
  await page.getByRole('button',{name:/账户菜单：/}).click()
  await page.getByRole('menuitem',{name:'退出登录',exact:true}).click()
 }
+const checkHeader=async label=>{
+ // 调整视口后等待重绘，避免读到媒体查询应用过程中的中间布局。
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+ const layout=await page.evaluate(()=>{
+   const nav=document.querySelector('.primary-navigation')
+   const rect=element=>{const r=element.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}}
+   const items=[...nav.querySelectorAll('.el-menu-item,.settings-trigger')].map(rect)
+   return {width:innerWidth,nav:rect(nav),brand:rect(document.querySelector('.brand')),user:rect(document.querySelector('.user')),
+     first:items[0],center:(items[0].left+items.at(-1).right)/2,scrolls:nav.scrollWidth>nav.clientWidth+1,
+     font:getComputedStyle(nav.querySelector('.el-menu-item')).fontSize}
+ })
+ assert.equal(layout.font,layout.width<=600?'14px':'15px')
+ if(!layout.scrolls)assert.ok(Math.abs(layout.center-layout.width/2)<1,`${label}: navigation is not centered: ${JSON.stringify(layout)}`)
+ if(layout.width>1000){
+   assert.ok(layout.nav.left>=layout.brand.right+8,`${label}: navigation overlaps brand`)
+   assert.ok(layout.nav.right<=layout.user.left-8,`${label}: navigation overlaps account controls`)
+ }else{
+   assert.ok(layout.nav.top>=Math.max(layout.brand.bottom,layout.user.bottom),`${label}: navigation must have its own row: ${JSON.stringify(layout)}`)
+   assert.ok(layout.first.left>=layout.nav.left-1,`${label}: first menu item is clipped`)
+ }
+ pass(`${label}: readable navigation centered when it fits, no control overlap`)
+}
+const checkConfirmation=async label=>{
+ const box=page.locator('.el-message-box')
+ await box.waitFor()
+ const bounds=await box.boundingBox()
+ assert.ok(Math.abs(bounds.width-Math.min(420,page.viewportSize().width-32))<1,`${label}: incorrect confirmation width ${bounds.width}`)
+ assert.ok(Math.abs(bounds.x+bounds.width/2-page.viewportSize().width/2)<1)
+ assert.ok(await box.evaluate(el=>el.scrollWidth<=el.clientWidth+1),`${label}: confirmation content overflows`)
+ pass(`${label}: compact centered confirmation fits the viewport`)
+}
 try{
  await page.goto(`${base}/login`)
  await page.getByRole('heading',{name:'欢迎登录'}).waitFor()
@@ -71,6 +102,12 @@ try{
  assert.equal(await settings.count(),1)
  assert.equal(await page.locator('.aside').count(),0)
  pass('admin sees three primary links plus Settings; monitoring counts unchanged')
+ await checkHeader('desktop at 1600px')
+ for(const width of [1251,1250,1001,1000]){
+   await page.setViewportSize({width,height:1000})
+   await checkHeader(`header breakpoint at ${width}px`)
+ }
+ await page.setViewportSize({width:1600,height:1000})
  await page.locator('.el-table__row').filter({hasText:'PostgreSQL'}).locator('.el-table__expand-icon').click()
  await page.getByText('postgresql-1',{exact:false}).waitFor()
  await page.getByRole('button',{name:'立即刷新',exact:true}).click();await waitLoaded()
@@ -114,7 +151,13 @@ try{
  await page.getByRole('button',{name:'查询',exact:true}).click();await waitLoaded()
  assert.equal(await page.locator('.el-table__row').count(),1)
  for(const action of ['删除','禁用','重置密码']){
-   await page.getByRole('button',{name:action,exact:true}).click();await cancel()
+   await page.getByRole('button',{name:action,exact:true}).click()
+   await checkConfirmation(`${action} at 1600px`)
+   if(action==='禁用'){
+     assert.equal(await page.locator('.confirmation-details p').count(),2)
+     await snap('confirmation-disable')
+   }
+   await cancel()
  }
  assert.ok(await page.getByText('启用',{exact:true}).isVisible())
  assert.equal(await page.locator('.el-table__row').count(),1)
@@ -146,7 +189,10 @@ try{
  assert.equal(await page.locator('.el-message-box:visible').count(),0)
  await page.getByRole('button',{name:'重置',exact:true}).click();await waitLoaded()
  await face.fill('85');await face.blur()
- await page.getByRole('button',{name:'保存',exact:true}).click();await cancel()
+ await page.getByRole('button',{name:'保存',exact:true}).click()
+ await checkConfirmation('threshold confirmation')
+ assert.equal(await page.locator('.confirmation-details p').count(),2)
+ await cancel()
  await page.getByRole('button',{name:'重置',exact:true}).click();await waitLoaded()
  assert.equal(await face.inputValue(),original)
  pass('threshold validation and cancelled confirmation unchanged')
@@ -171,6 +217,7 @@ try{
    await page.setViewportSize({width,height:900})
    for(const [name,path] of [['服务状态监控','monitor'],['匹配阈值配置','threshold'],['账户管理','accounts'],['日志查询','logs'],['审计查询','audits']]){
      await nav(name,path)
+     if(path==='monitor')await checkHeader(`header at ${width}px`)
      await noOverflow(`${path} at ${width}px`)
      if(width===390&&path==='accounts'){
        const unmasked=await page.evaluate(()=>{
@@ -184,7 +231,7 @@ try{
      if(width===390&&['monitor','accounts'].includes(path))await snap(`mobile-${path}`)
    }
  }
- await openLogout();await cancel()
+ await openLogout();await checkConfirmation('logout at 320px');await cancel()
  assert.match(page.url(),/audits/)
  await openLogout()
  await page.locator('.el-message-box').getByRole('button',{name:'确定',exact:true}).click()

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { ROLE, ROLE_LABEL } from '@/constants/roles'
 import { CONFIRM_TITLE } from '@/constants/nav'
+import { buildConfirmationMessage } from '@/utils/confirmation'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -102,7 +103,7 @@ async function toggleEnabled(row) {
   const ok = await confirmAction(
     next
       ? `确认启用账户「${row.username}」？`
-      : `确认禁用账户「${row.username}」？禁用后该账户不可登录，其历史操作记录保留。`
+      : buildConfirmationMessage(`确认禁用账户「${row.username}」？`, ['禁用后该账户不可登录。', '历史操作记录保留。'])
   )
   if (!ok) return
   try {
@@ -123,7 +124,7 @@ async function toggleEnabled(row) {
 
 async function handleDelete(row) {
   const ok = await confirmAction(
-    `确认删除账户「${row.username}」？该操作将记入审计。`,
+    buildConfirmationMessage(`确认删除账户「${row.username}」？`, ['该操作将记入审计。']),
     { confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' }
   )
   if (!ok) return
@@ -138,7 +139,7 @@ async function handleDelete(row) {
 
 async function handleResetPassword(row) {
   const ok = await confirmAction(
-    `确认重置账户「${row.username}」的密码？该操作将记入审计。`
+    buildConfirmationMessage(`确认重置账户「${row.username}」的密码？`, ['该操作将记入审计。'])
   )
   if (!ok) return
   try {
