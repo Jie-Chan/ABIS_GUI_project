@@ -1,4 +1,5 @@
-// HTTP 契约转换；服务失败不回落 mock。
+// 管理 API 请求与响应转换。
+import { OPTIONAL_ACCOUNT_FIELDS, optionalAccountFields, optionalAccountText } from '../../utils/account.js'
 function object(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label}响应结构不完整，请核对后端报文`)
   return value
@@ -26,7 +27,7 @@ function identity(data, username = '') {
   object(data, '账户')
   const source = object(data.account ?? data.user ?? data, '账户')
   const role = ['admin', 'operator'].includes(source.role) ? source.role : ''
-  return { id: source.id ?? source.userId, username: source.username || username, displayName: source.displayName || source.nickname || source.username || username, role, identityPending: !role }
+  return { id: source.id ?? source.userId, username: source.username || username, displayName: source.displayName || source.nickname || source.username || username, role, identityPending: !role, ...optionalAccountFields(source) }
 }
 
 export function accountPage(data) {
@@ -35,7 +36,8 @@ export function accountPage(data) {
     object(item, '账户')
     if (!validId(item.id) || typeof item.username !== 'string' || !item.username || typeof item.displayName !== 'string' || typeof item.enabled !== 'boolean' || typeof item.role !== 'string') throw new Error('账户列表缺少有效 ID、用户名、姓名、角色或启用状态，请核对后端报文')
     const time = value => value == null || value === '' || value === '—' ? null : value
-    return { id: item.id, username: item.username, displayName: item.displayName, role: item.role, enabled: item.enabled, createdAt: time(item.createdAt), lastLoginAt: time(item.lastLoginAt) }
+    // 仅归一化读取字段；写入仍由 create/update 的字段白名单控制。
+    return { id: item.id, username: item.username, displayName: item.displayName, role: item.role, enabled: item.enabled, ...optionalAccountFields(item), createdAt: time(item.createAt) ?? time(item.createdAt), updatedAt: time(item.updateAt) ?? time(item.updatedAt), lastLoginAt: time(item.lastLoginAt) }
   }) }
 }
 export function thresholds(data) {
@@ -61,6 +63,22 @@ export function health(data) {
   return data
 }
 
+export async function exportFile(data) {
+  if (!(data instanceof Blob) || !data.size) throw new Error('导出接口未返回有效文件')
+  const prefix = (await data.slice(0, 256).text()).trimStart()
+  if (/json/i.test(data.type) || prefix.startsWith('{') || prefix.startsWith('[')) {
+    let body
+    try { body = JSON.parse(await data.text()) } catch { /* CSV 也可能以括号开头。 */ }
+    if (body !== undefined) {
+      unwrap(body)
+      throw new Error('导出接口返回了 JSON，请联系管理员检查服务')
+    }
+    if (/json/i.test(data.type)) throw new Error('导出接口返回了无效 JSON')
+  }
+  if (/html/i.test(data.type) || /^<!doctype html|^<html/i.test(prefix)) throw new Error('导出接口返回了网页，请检查服务连接')
+  return data
+}
+
 function logPage(data, audit = false) {
   const result = page(data)
   const fields = audit ? ['operatedAt', 'operator', 'action', 'target', 'result', 'sourceIp', 'sessionId'] : ['calledAt', 'caller', 'api', 'feature', 'result', 'costMs']
@@ -76,6 +94,10 @@ function logPage(data, audit = false) {
 export function createRemote(request) {
   const call = async (method, url, data, params) => unwrap(await request({ method, url, data, params }))
   const clean = params => Object.fromEntries(Object.entries(params || {}).filter(([, v]) => v !== '' && v != null))
+  const download = async (url, params, fields) => exportFile(await request({
+    method: 'get', url, responseType: 'blob',
+    params: clean(Object.fromEntries(fields.filter(key => params?.[key] !== undefined).map(key => [key, params[key]]))),
+  }))
   const userPath = id => {
     if (!validId(id)) throw new Error('缺少有效的真实账户 ID，无法执行操作')
     return `/system/user/${encodeURIComponent(id)}`
@@ -88,6 +110,14 @@ export function createRemote(request) {
       return { token, account: identity(data, username) }
     },
     logout: () => call('post', '/system/auth/logout'),
+    async changePassword({ oldPassword, newPassword }) {
+      try {
+        return await call('post', '/system/auth/change-password', { oldPassword, newPassword })
+      } catch (error) {
+        if ([404, 405, 501].includes(error.status)) throw new Error('服务暂未提供修改密码功能，请联系系统管理员')
+        throw error
+      }
+    },
     async getSession() {
       const data = object(await call('get', '/system/auth/get-permission-info'), '当前用户')
       const account = identity(data)
@@ -102,9 +132,9 @@ export function createRemote(request) {
       try { return thresholds(saved === true || saved == null ? await call('get', '/abis/thresholds') : saved) }
       catch (e) { throw new Error(`写入已成功，但无法确认保存后的配置：${e.message}。请先重新读取，勿重复提交。`) }
     },
-    createAccount: payload => call('post', '/system/user', { username: payload.username, displayName: payload.displayName, role: payload.role }),
+    createAccount: payload => call('post', '/system/user', { username: payload.username, displayName: payload.displayName, role: payload.role, ...optionalAccountFields(payload) }),
     updateAccount(id, payload) {
-      const data = Object.fromEntries(['displayName', 'role', 'enabled'].filter(key => key in payload).map(key => [key, payload[key]]))
+      const data = Object.fromEntries(['displayName', 'role', 'enabled', ...OPTIONAL_ACCOUNT_FIELDS].filter(key => key in payload).map(key => [key, OPTIONAL_ACCOUNT_FIELDS.includes(key) ? optionalAccountText(payload[key]) : payload[key]]))
       if (!Object.keys(data).length) throw new Error('没有可更新的账户字段')
       return call('put', userPath(id), data)
     },
@@ -112,5 +142,7 @@ export function createRemote(request) {
     resetPassword: id => call('post', `${userPath(id)}/reset-password`),
     listLogs: async params => logPage(await call('get', '/abis/call-log/page', undefined, clean(params))),
     listAudits: async params => logPage(await call('get', '/system/audit-log/page', undefined, clean(params)), true),
+    exportLogs: params => download('/abis/call-log/export', params, ['startTime', 'endTime', 'api', 'feature', 'result', 'minCost', 'maxCost']),
+    exportAudits: params => download('/system/audit-log/export', params, ['startTime', 'endTime', 'operator', 'action', 'result']),
   }
 }

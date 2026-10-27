@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import api, { apiMode } from '@/api'
+import api from '@/api'
 import {
   downloadBlob,
   timestampedName,
@@ -18,10 +18,6 @@ import {
   LOG_RESULT_TAG_TYPE,
 } from '@/constants/log'
 
-// ⚠ 页面 / 卡片标题**从 `route.meta.title` 取，不要在本文件里再写一遍字面量**。
-//   Global Constraints 第 2 条禁止同一句文案在多个文件里重复；
-//   导航标签、路由 `meta.title`、页头本来就走同一处来源
-//   （Task 11 会把它们进一步收成 `src/constants/nav.js`）。
 const route = useRoute()
 const title = computed(() => route.meta.title || '')
 const loading = ref(false)
@@ -30,7 +26,6 @@ const error = ref('')
 const rows = ref([])
 const total = ref(0)
 
-/** 五个过滤维度 —— 需求 1.4：时间范围、接口、生物模态、结果状态、耗时区间 */
 const query = ref({
   page: 1,
   pageSize: 20,
@@ -77,9 +72,6 @@ async function load() {
     rows.value = result.items
     total.value = result.total
   } catch (e) {
-    // 查询失败必须与「查无记录」区分开：不接住异常，表格会停在旧数据上、
-    // 错误会被交给 Vue 的 errorHandler 打印（⚠ **不是**「未处理 rejection」，见 Task 8 同处说明），
-    // 用户会把「读不到」误读成「没有日志」。
     error.value = e.message || '查询调用日志失败'
   } finally {
     loading.value = false
@@ -96,7 +88,7 @@ async function handleExport() {
   exporting.value = true
   try {
     const blob = await api.exportLogs(query.value)
-    downloadBlob(blob, timestampedName(apiMode === 'hybrid' ? 'MOCK_abis_api_logs' : 'abis_api_logs'))
+    downloadBlob(blob, timestampedName('abis_api_logs'))
     ElMessage.success(EXPORT_STARTED_MESSAGE)
   } catch (e) {
     ElMessage.error(e.message || EXPORT_FAILED_MESSAGE)
@@ -111,7 +103,9 @@ onMounted(load)
 <template>
   <div>
     <el-card>
-      <template #header><span>{{ title }}</span></template>
+      <template #header>
+        <div class="record-heading"><span>{{ title }}</span><span class="record-count">共 {{ total }} 条调用记录</span></div>
+      </template>
 
       <el-alert
         v-if="error"
@@ -154,7 +148,7 @@ onMounted(load)
         <el-form-item>
           <el-button type="primary" @click="load">查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
-          <el-button :loading="exporting" @click="handleExport">{{ apiMode === 'hybrid' ? '导出 Mock 样本 CSV' : '导出 CSV' }}</el-button>
+          <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
         </el-form-item>
       </el-form>
 
@@ -192,8 +186,7 @@ onMounted(load)
       />
 
       <p class="note">
-        仅记录五个业务接口的调用元数据。健康检查不纳入调用日志。
-        调用记录不含请求报文中的生物图像数据。保留期默认 1 个月，到期由定时任务清理。
+        仅展示接口调用元数据，不含生物图像。
       </p>
     </el-card>
 
@@ -212,7 +205,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-.filters { margin-bottom: 4px; }
-.dash { margin: 0 6px; color: #909399; }
-.note { margin: 12px 0 0; color: #909399; font-size: 12px; line-height: 1.7; }
+.dash { margin: 0 8px; color: #8c99ac; }
+.note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
 </style>

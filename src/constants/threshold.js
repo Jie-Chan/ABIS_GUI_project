@@ -39,7 +39,7 @@ export const ACTIVE_SEMANTICS = 'undecided' // 取值：'undecided' | 'coerce' |
 export const LOWER_BOUND_MESSAGE = {
   // 【未裁决】默认态：不替协议表态，但必须告知存在不确定（需求 1.2 两条约束同时满足）
   undecided: (label, input, bound) =>
-    `${label}设置为 ${input}，低于协议生效下限 ${bound}。该情形下 ABIS 是按 ${bound} 生效还是拒绝本次设置，协议尚未明确，待澄清后再提交。`,
+    `${label}设置为 ${input}，低于协议生效下限 ${bound}。请调整至不低于 ${bound} 后再保存。`,
   // 【纠正】语义：允许提交，但必须明确告知实际生效值
   coerce: (label, input, bound) =>
     `${label}设置为 ${input}，低于协议生效下限 ${bound}；实际生效值为 ${bound}。`,

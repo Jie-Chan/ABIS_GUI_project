@@ -4,10 +4,6 @@
  * JSDoc 描述页面使用的入参与返回；真实路径和报文转换见 remote.js，
  * 账户开发约定及后端实现状态见 docs/2026-10-27-账户管理后端接口草案v1.md。
  *
- * ⚠ 全部 15 个方法的路径与报文字段**尚未冻结**。
- *   建议路径见《设计方案》§8，最终以 ABIS 侧冻结结果为准。
- *
- * 需求出处：附录 A.1（8 条管理 API）、1.1、1.2、1.3、1.4、2.2
  */
 
 /**
@@ -15,8 +11,12 @@
  * @property {string|number} id
  * @property {string} username
  * @property {string} displayName
+ * @property {string} phone 可选资料，空值归一为 "-"
+ * @property {string} email
+ * @property {string} remark
  * @property {'admin'|'operator'} role
  * @property {boolean} enabled
+ * @property {string|null} updatedAt
  * @property {string|null} createdAt
  * @property {string|null} lastLoginAt
  */
@@ -103,20 +103,18 @@
  */
 
 /**
- * 契约本身 —— 15 个方法的入参与返回。两个适配器都按此实现。
+ * 管理 API 的 16 个方法。实际路径与报文转换由 remote.js 定义。
  *
- * ⚠⚠ startTime / endTime 是 **'YYYY-MM-DD HH:mm:ss' 字符串**。
- *   过滤实现按字符串比较（mock 与后端皆然），传 Date 对象或 'YYYY-MM-DD'
- *   **不会报错，只会静默返回空列表** —— 页面从 el-date-picker 拿到 Date 后，
- *   必须先经 formatDateTime（@/utils/datetime）归一化再传入。
+ * startTime / endTime 使用 'YYYY-MM-DD HH:mm:ss' 字符串。
  *
  * @typedef {Object} ApiContract
  * @property {(username: string, password: string) => Promise<{token: string, account: Account}>} login
+ * @property {(payload: {oldPassword: string, newPassword: string}) => Promise<Object|boolean|void>} changePassword
  * @property {() => Promise<void>} logout
  * @property {() => Promise<{account: Account}|null>} getSession
  * @property {(params?: PageParams & {keyword?: string}) => Promise<{total: number, items: Account[]}>} listAccounts
- * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator'}) => Promise<Account|Object|boolean>} createAccount
- * @property {(id: string|number, payload: {displayName?: string, role?: string, enabled?: boolean}) => Promise<Account|boolean>} updateAccount
+ * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator', phone?: string, email?: string, remark?: string}) => Promise<Account|Object|boolean>} createAccount
+ * @property {(id: string|number, payload: {displayName?: string, role?: string, enabled?: boolean, phone?: string, email?: string, remark?: string}) => Promise<Account|boolean>} updateAccount
  * @property {(id: string|number) => Promise<void|boolean>} deleteAccount
  * @property {(id: string|number) => Promise<Object|void|boolean>} resetPassword
  * @property {() => Promise<{face: number, finger: number}>} getThresholds
@@ -130,10 +128,10 @@
 
 /**
  * 适配器必须实现的接口清单。
- * 新增接口时先改这里，再改两个适配器。
+ * 新增接口时同步更新此清单与 remote.js。
  */
 export const API_METHODS = [
-  'login', 'logout', 'getSession',
+  'login', 'logout', 'getSession', 'changePassword',
   'listAccounts', 'createAccount', 'updateAccount', 'deleteAccount', 'resetPassword',
   'getThresholds', 'updateThresholds',
   'getHealth',

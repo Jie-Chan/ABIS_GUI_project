@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import api, { apiMode } from '@/api'
+import api from '@/api'
 import {
   downloadBlob,
   timestampedName,
@@ -11,10 +11,6 @@ import {
 } from '@/utils/csv'
 import { AUDIT_ACTIONS } from '@/constants/audit'
 
-// ⚠ 页面 / 卡片标题**从 `route.meta.title` 取，不要在本文件里再写一遍字面量**。
-//   Global Constraints 第 2 条禁止同一句文案在多个文件里重复；
-//   导航标签、路由 `meta.title`、页头本来就走同一处来源
-//   （Task 11 会把它们进一步收成 `src/constants/nav.js`）。
 const route = useRoute()
 const title = computed(() => route.meta.title || '')
 const loading = ref(false)
@@ -51,7 +47,6 @@ async function load() {
     rows.value = result.items
     total.value = result.total
   } catch (e) {
-    // 同 Task 9：查询失败必须与「查无记录」区分开。
     error.value = e.message || '查询审计记录失败'
   } finally {
     loading.value = false
@@ -68,7 +63,7 @@ async function handleExport() {
   exporting.value = true
   try {
     const blob = await api.exportAudits(query.value)
-    downloadBlob(blob, timestampedName(apiMode === 'hybrid' ? 'MOCK_abis_audit' : 'abis_audit'))
+    downloadBlob(blob, timestampedName('abis_audit'))
     ElMessage.success(EXPORT_STARTED_MESSAGE)
   } catch (e) {
     ElMessage.error(e.message || EXPORT_FAILED_MESSAGE)
@@ -83,7 +78,9 @@ onMounted(load)
 <template>
   <div>
     <el-card>
-      <template #header><span>{{ title }}</span></template>
+      <template #header>
+        <div class="record-heading"><span>{{ title }}</span><span class="record-count">共 {{ total }} 条审计记录</span></div>
+      </template>
 
       <el-alert
         v-if="error"
@@ -120,7 +117,7 @@ onMounted(load)
         <el-form-item>
           <el-button type="primary" @click="load">查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
-          <el-button :loading="exporting" @click="handleExport">{{ apiMode === 'hybrid' ? '导出 Mock 样本 CSV' : '导出 CSV' }}</el-button>
+          <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
         </el-form-item>
       </el-form>
 
@@ -155,8 +152,7 @@ onMounted(load)
       />
 
       <p class="note">
-        审计记录只写不改不删，本页仅提供查询与导出，不提供修改或删除入口。
-        查询与导出行为本身不计入审计范围。保留期默认 1 年、配置上限 2 年。
+        审计记录仅供查询和导出。
       </p>
     </el-card>
 
@@ -179,6 +175,5 @@ onMounted(load)
 </template>
 
 <style scoped>
-.filters { margin-bottom: 4px; }
-.note { margin: 12px 0 0; color: #909399; font-size: 12px; line-height: 1.7; }
+.note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
 </style>

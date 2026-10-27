@@ -1,0 +1,11 @@
+{
+  "name": "abis-gui-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node review.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}
