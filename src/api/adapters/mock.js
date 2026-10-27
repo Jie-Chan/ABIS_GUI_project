@@ -17,6 +17,9 @@ import { LOG_FEATURE_LABEL, LOG_RESULT_LABEL } from '@/constants/log'
 let accounts = mockAccounts.map((a) => ({ ...a }))
 let thresholds = { ...mockThresholds }
 let nextAccountId = accounts.length + 1
+// 本人改密仅在当前 Mock 模块会话内有效，演示种子数据保持原样。
+const credentials = mockCredentials.map((credential) => ({ ...credential }))
+let sessionAccountId = null
 
 const logs = buildLogRecords()
 const audits = buildAuditRecords()
@@ -39,12 +42,13 @@ export default {
     if (!account || !account.enabled) {
       throw new Error('账户不存在或已被禁用')
     }
-    const credential = mockCredentials.find(
+    const credential = credentials.find(
       (c) => c.username === username && c.password === password
     )
     if (!credential) {
       throw new Error('用户名或密码错误')
     }
+    sessionAccountId = account.id
     return {
       token: `mock-token-${account.id}`,
       account: { ...account },
@@ -53,11 +57,25 @@ export default {
 
   async logout() {
     await delay(80)
+    sessionAccountId = null
   },
 
   async getSession() {
     await delay(80)
     return null
+  },
+
+  async changePassword({ oldPassword, newPassword } = {}) {
+    await delay()
+    const account = accounts.find((item) => item.id === sessionAccountId && item.enabled)
+    if (!account) throw new Error('登录状态已失效，请重新登录')
+    if (typeof oldPassword !== 'string' || !oldPassword || typeof newPassword !== 'string' || !newPassword) {
+      throw new Error('请填写原密码和新密码')
+    }
+    const credential = credentials.find((item) => item.accountId === account.id)
+    if (!credential || credential.password !== oldPassword) throw new Error('原密码不正确')
+    credential.password = newPassword
+    sessionAccountId = null
   },
 
   // ——— 账户管理（需求 1.1）———

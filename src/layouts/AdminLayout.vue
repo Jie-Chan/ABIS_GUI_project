@@ -8,6 +8,7 @@ import { NAV_ITEMS, APP_NAME } from '@/constants/nav'
 import BrandMark from '@/components/BrandMark.vue'
 import UiIcon from '@/components/UiIcon.vue'
 import DataSourceBadge from '@/components/DataSourceBadge.vue'
+import ProfileDialog from '@/components/ProfileDialog.vue'
 import { PAGE_DESCRIPTIONS, isMockPreview, dataSourceNote } from '@/constants/presentation'
 
 const route = useRoute()
@@ -16,6 +17,7 @@ const auth = useAuthStore()
 
 const title = APP_NAME
 const logoutLabel = '退出登录'
+const profileVisible = ref(false)
 
 /**
  * 先按原权限矩阵过滤，再做展示分组；不新增路由或权限点。
@@ -29,6 +31,11 @@ const isSettingsPage = computed(() => settingsPages.has(route.name))
 const currentTitle = computed(() => route.meta.title || '')
 const roleLabel = computed(() => ROLE_LABEL[auth.role] || auth.role)
 const displayName = computed(() => auth.account?.username || auth.account?.displayName || '')
+
+function handleAccountCommand(command) {
+  if (command === 'profile') profileVisible.value = true
+  if (command === 'logout') return handleLogout()
+}
 
 // 提示消息跟随实际导航高度，避免在窄屏换行后遮住菜单。
 const headerRef = ref(null)
@@ -88,9 +95,19 @@ async function handleLogout() {
       </nav>
       <div class="user">
         <DataSourceBadge />
-        <span class="avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
-        <span class="user-name" :title="`${displayName}（${roleLabel}）`">{{ displayName }}<span class="user-role"> · {{ roleLabel }}</span></span>
-        <el-button link @click="handleLogout">{{ logoutLabel }}</el-button>
+        <el-dropdown trigger="click" placement="bottom-end" popper-class="account-menu" @command="handleAccountCommand">
+          <button class="account-trigger" type="button" :aria-label="`账户菜单：${displayName}（${roleLabel}）`">
+            <span class="avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
+            <span class="user-name" :title="`${displayName}（${roleLabel}）`">{{ displayName }}<span class="user-role"> · {{ roleLabel }}</span></span>
+            <UiIcon class="account-chevron" name="arrow" :size="12" />
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="profile"><UiIcon name="accounts" :size="18" />个人信息</el-dropdown-item>
+              <el-dropdown-item command="logout" divided><UiIcon name="logout" :size="18" />{{ logoutLabel }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </el-header>
 
@@ -105,6 +122,7 @@ async function handleLogout() {
       <footer class="workspace-footer">{{ title }} <span>·</span> {{ isMockPreview ? 'Mock 界面预览' : 'HTTP 接口模式' }}</footer>
     </el-main>
   </el-container>
+  <ProfileDialog v-model="profileVisible" />
   </el-config-provider>
 </template>
 
@@ -122,10 +140,12 @@ async function handleLogout() {
 .settings-trigger:hover { background: #223854; color: #fff; }
 .settings-chevron { transform: rotate(90deg); }
 .user { display: flex; flex-shrink: 0; align-items: center; gap: 12px; margin-left: auto; font-size: 12px; white-space: nowrap; }
-.avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; margin-left: 4px; }
+.account-trigger { display: flex; align-items: center; gap: 10px; min-height: 42px; max-width: 300px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #d8e2ef; font-size: 12px; }
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: #263c58; }
+.account-chevron { transform: rotate(90deg); }
+.avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; }
+.user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #acbdd4; }
-.user :deep(.el-button) { padding-left: 14px; border-left: 1px solid #40516a; border-radius: 0; color: #d8e2ef; font-size: 12px; }
-.user :deep(.el-button:hover) { color: #fff; }
 .workspace-main { width: 100%; min-width: 0; padding: 28px 48px; overflow: visible; }
 .breadcrumb { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 12px; }
 .breadcrumb > span { color: #7c8ba1; }
@@ -161,11 +181,11 @@ async function handleLogout() {
   .header { padding: 16px 16px 0; gap: 0 10px; }
   .brand { gap: 8px; }
   .brand strong { font-size: 22px; }
-  .brand > span:last-child, .avatar, .user-name { display: none; }
+  .brand > span:last-child, .user-name { display: none; }
   .brand :deep(.brand-mark) { width: 24px; height: 24px; }
   .user { gap: 8px; }
   .user :deep(.source-badge) { padding: 3px 7px; font-size: 10px; }
-  .user :deep(.el-button) { padding-left: 8px; font-size: 11px; }
+  .account-trigger { gap: 7px; padding: 4px; }
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 12px; padding-right: 12px; gap: 6px; font-size: 12px; }
   .primary-navigation :deep(.ui-icon) { display: none; }
   .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }

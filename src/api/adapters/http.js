@@ -42,6 +42,7 @@ export default {
   login: notReady('login'),
   logout: notReady('logout'),
   getSession: notReady('getSession'),
+  changePassword: notReady('changePassword'),
 
   listAccounts: notReady('listAccounts'),
   createAccount: notReady('createAccount'),

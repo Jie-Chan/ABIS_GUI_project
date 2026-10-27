@@ -4,7 +4,7 @@
  * 本文件用 JSDoc 描述每个接口的入参与返回。两个适配器
  * （adapters/mock.js 与 adapters/http.js）都必须实现这里的签名。
  *
- * ⚠ 全部 15 个方法的路径与报文字段**尚未冻结**。
+ * ⚠ 接口路径与报文字段**尚未冻结**。
  *   建议路径见《设计方案》§8，最终以 ABIS 侧冻结结果为准。
  *
  * 需求出处：附录 A.1（8 条管理 API）、1.1、1.2、1.3、1.4、2.2
@@ -103,7 +103,7 @@
  */
 
 /**
- * 契约本身 —— 15 个方法的入参与返回。两个适配器都按此实现。
+ * 契约本身 —— 两个适配器都按此实现。
  *
  * ⚠⚠ startTime / endTime 是 **'YYYY-MM-DD HH:mm:ss' 字符串**。
  *   过滤实现按字符串比较（mock 与后端皆然），传 Date 对象或 'YYYY-MM-DD'
@@ -114,6 +114,7 @@
  * @property {(username: string, password: string) => Promise<{token: string, account: Account}>} login
  * @property {() => Promise<void>} logout
  * @property {() => Promise<{account: Account}|null>} getSession
+ * @property {(payload: {oldPassword: string, newPassword: string}) => Promise<void>} changePassword 本人改密；身份来自当前会话，不接受目标账户 ID
  * @property {(params?: PageParams & {keyword?: string}) => Promise<{total: number, items: Account[]}>} listAccounts
  * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator'}) => Promise<Account>} createAccount
  * @property {(id: number, payload: Partial<Account>) => Promise<Account>} updateAccount
@@ -133,7 +134,7 @@
  * 新增接口时先改这里，再改两个适配器。
  */
 export const API_METHODS = [
-  'login', 'logout', 'getSession',
+  'login', 'logout', 'getSession', 'changePassword',
   'listAccounts', 'createAccount', 'updateAccount', 'deleteAccount', 'resetPassword',
   'getThresholds', 'updateThresholds',
   'getHealth',

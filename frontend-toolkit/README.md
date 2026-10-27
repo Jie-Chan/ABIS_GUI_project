@@ -11,7 +11,7 @@ frontend-toolkit/
 │   ├── theme-factory/
 │   └── webapp-testing/
 ├── reference/              imagegen、skill-installer 的说明与辅助资源
-├── verification/           本项目的 46 项浏览器检查脚本及依赖锁文件
+├── verification/           界面与个人账户浏览器回归脚本及依赖锁文件
 ├── install-skills.sh        离线复制推荐技能的脚本
 └── provenance.json          上游仓库、版本与下载日期
 ```

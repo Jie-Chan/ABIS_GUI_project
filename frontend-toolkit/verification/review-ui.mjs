@@ -43,6 +43,10 @@ const login=async(username,password)=>{
  await page.getByRole('button',{name:'登录',exact:true}).click()
  await page.waitForURL('**/monitor');await waitLoaded()
 }
+const openLogout=async()=>{
+ await page.getByRole('button',{name:/账户菜单：/}).click()
+ await page.getByRole('menuitem',{name:'退出登录',exact:true}).click()
+}
 try{
  await page.goto(`${base}/login`)
  await page.getByRole('heading',{name:'欢迎登录'}).waitFor()
@@ -180,9 +184,9 @@ try{
      if(width===390&&['monitor','accounts'].includes(path))await snap(`mobile-${path}`)
    }
  }
- await page.getByRole('button',{name:'退出登录',exact:true}).click();await cancel()
+ await openLogout();await cancel()
  assert.match(page.url(),/audits/)
- await page.getByRole('button',{name:'退出登录',exact:true}).click()
+ await openLogout()
  await page.locator('.el-message-box').getByRole('button',{name:'确定',exact:true}).click()
  await page.waitForURL('**/login')
  pass('logout cancellation and confirmation')
