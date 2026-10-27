@@ -153,7 +153,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="account-page">
     <el-card>
       <template #header>
         <div class="record-heading"><span>控制台账户</span><span class="record-count">共 {{ total }} 个账户</span></div>
@@ -169,7 +169,7 @@ onMounted(load)
       <div class="toolbar">
         <el-input
           v-model="query.keyword"
-          placeholder="搜索用户名或姓名"
+          placeholder="搜索用户名"
           clearable
           style="width: 240px"
           @keyup.enter="load"
@@ -181,20 +181,28 @@ onMounted(load)
       </div>
 
       <el-table :data="rows" v-loading="loading" border style="width: 100%">
+        <el-table-column prop="id" label="账户 ID" width="90" />
         <el-table-column prop="username" label="用户名" min-width="140" />
-        <el-table-column prop="displayName" label="姓名" min-width="120" />
         <el-table-column label="角色" width="110">
           <template #default="{ row }">{{ ROLE_LABEL[row.role] }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="启用状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'">
               {{ row.enabled ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="170" />
-        <el-table-column prop="lastLoginAt" label="最近登录" width="170" />
+        <!-- 仅兼容展示字段；不向接口或编辑表单回写别名。 -->
+        <el-table-column label="创建时间" min-width="165">
+          <template #default="{ row }">{{ row.createAt || row.createdAt || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="更新时间" min-width="165">
+          <template #default="{ row }">{{ row.updateAt || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="最近登录时间" min-width="165">
+          <template #default="{ row }">{{ row.lastLoginAt || '—' }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
@@ -249,4 +257,9 @@ onMounted(load)
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .spacer { flex: 1; }
 .note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
+@media (max-width: 767px) {
+  /* 窄屏取消操作列吸附，避免固定列遮住用户名与其他数据。 */
+  .account-page :deep(.el-table-fixed-column--right) { position: static !important; }
+  .account-page :deep(.el-table-fixed-column--right::before) { display: none; }
+}
 </style>

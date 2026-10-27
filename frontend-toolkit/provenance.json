@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/anthropics/skills",
+  "ref": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+  "skills": [
+    "frontend-design",
+    "theme-factory",
+    "webapp-testing"
+  ],
+  "downloaded_date": "2026-10-27",
+  "local_reference_skills": [
+    "imagegen",
+    "skill-installer"
+  ]
+}
