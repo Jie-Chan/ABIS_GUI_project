@@ -75,7 +75,11 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .el-dialog__title, .el-message-box__title { font-weight: 600; }
 .el-dialog__body .el-descriptions__label { width: 120px; }
 .el-dialog__body .el-descriptions__content { overflow-wrap: anywhere; }
-.el-message-box { max-width: calc(100vw - 32px); border-radius: 10px; padding: 20px; }
+.el-message-box { width: var(--el-messagebox-width, 420px); max-width: calc(100vw - 32px); border-radius: 10px; padding: 24px; }
+.el-message-box__message { line-height: 1.7; overflow-wrap: anywhere; }
+.confirmation-question { margin: 0; color: var(--el-text-color-primary); font-size: 14px; font-weight: 600; }
+.confirmation-details { margin-top: 10px; color: var(--el-text-color-secondary); font-size: 13px; }
+.el-message-box__message .confirmation-details p { margin: 4px 0 0; }
 
 @media (max-width: 767px) {
   .abis-shell .el-card__body { padding: 16px; }
@@ -92,5 +96,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
-.account-menu .el-dropdown-menu { min-width: 150px; padding: 6px; border-radius: 8px; }
-.account-menu .el-dropdown-menu__item { gap: 10px; min-height: 40px; padding: 0 14px; border-radius: 5px; font-size: 13px; }
+.account-menu .el-dropdown-menu { min-width: 170px; padding: 6px; border-radius: 8px; }
+.account-menu .el-dropdown-menu__item { display: flex; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 5px; color: #435572; font-size: 13px; }
+.account-menu .el-dropdown-menu__item:not(.is-disabled):focus { color: #3268e8; background: #edf3ff; }
+.account-menu .el-dropdown-menu__item--divided { margin-top: 6px; }

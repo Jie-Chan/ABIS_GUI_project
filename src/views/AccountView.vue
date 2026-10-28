@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { ROLE, ROLE_LABEL, PERMISSION, canResetAccountPassword, canDeleteAccount } from '@/constants/roles'
+import { buildConfirmationMessage } from '@/utils/confirmation'
 import { optionalAccountFields } from '@/utils/account'
 import { CONFIRM_TITLE } from '@/constants/nav'
 
@@ -82,7 +83,7 @@ function openEdit(row) {
 
 async function confirmAction(message, options = {}) {
   try {
-    await ElMessageBox.confirm(message, CONFIRM_TITLE, { type: 'warning', ...options })
+    await ElMessageBox.confirm(typeof message === 'string' ? buildConfirmationMessage(message) : message, CONFIRM_TITLE, { type: 'warning', ...options })
     return true
   } catch {
     return false
@@ -146,7 +147,7 @@ async function handleSubmit() {
 async function toggleEnabled(row) {
   if (!canManage.value) return
   const next = !row.enabled
-  if (!await confirmAction(`确认${next ? '启用' : '禁用'}账户「${row.username}」？`)) return
+  if (!await confirmAction(buildConfirmationMessage(`确认${next ? '启用' : '禁用'}账户「${row.username}」？`, [next ? '启用后允许该账户登录。' : '禁用后该账户不可登录。']))) return
   saving.value = true
   try {
     await api.updateAccount(row.id, { enabled: next })
@@ -162,7 +163,7 @@ async function toggleEnabled(row) {
 
 async function handleDelete(row) {
   if (!canDelete(row)) return
-  if (!await confirmAction(`确认删除账户「${row.username}」？`, { confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })) return
+  if (!await confirmAction(buildConfirmationMessage(`确认删除账户「${row.username}」？`, ['删除后该账户将无法登录。']), { confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })) return
   saving.value = true
   try {
     await api.deleteAccount(row.id)
@@ -178,7 +179,7 @@ async function handleDelete(row) {
 
 async function handleResetPassword(row) {
   if (!canReset(row)) return
-  if (!await confirmAction(`确认重置账户「${row.username}」的密码？`)) return
+  if (!await confirmAction(buildConfirmationMessage(`确认重置账户「${row.username}」的密码？`, ['操作结果将在密码结果弹窗中显示。']))) return
   saving.value = true
   try {
     const result = await api.resetPassword(row.id)

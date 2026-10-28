@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_LABEL } from '@/constants/roles'
+import { buildConfirmationMessage } from '@/utils/confirmation'
 import { optionalAccountText } from '@/utils/account'
 
 const visible = defineModel({ type: Boolean, default: false })
@@ -54,7 +55,7 @@ async function savePassword() {
   submitError.value = ''
   if (!await formRef.value?.validate().catch(() => false)) return
   try {
-    await ElMessageBox.confirm('确认修改本人密码？修改成功后需要重新登录。', '二次确认', { type: 'warning' })
+    await ElMessageBox.confirm(buildConfirmationMessage('确认修改本人密码？', ['修改成功后需要重新登录。']), '二次确认', { type: 'warning' })
   } catch { return }
   saving.value = true
   try {
@@ -91,7 +92,7 @@ async function savePassword() {
     <section class="password-section" aria-labelledby="change-password-heading">
       <h3 id="change-password-heading">修改密码</h3>
       <el-alert v-if="submitError" :title="submitError" type="error" :closable="false" class="profile-error" />
-      <el-form ref="formRef" :model="password" :rules="rules" label-width="100px" :disabled="saving || loading || account.identityPending" @submit.prevent="savePassword">
+      <el-form ref="formRef" :model="password" :rules="rules" label-position="top" :disabled="saving || loading || account.identityPending" @submit.prevent="savePassword">
         <el-form-item label="原密码" prop="oldPassword"><el-input v-model="password.oldPassword" type="password" show-password placeholder="请输入原密码" autocomplete="current-password" /></el-form-item>
         <el-form-item label="新密码" prop="newPassword"><el-input v-model="password.newPassword" type="password" show-password placeholder="请输入新密码" autocomplete="new-password" /></el-form-item>
         <el-form-item label="确认新密码" prop="confirmPassword"><el-input v-model="password.confirmPassword" type="password" show-password placeholder="请再次输入新密码" autocomplete="new-password" @keyup.enter="savePassword" /></el-form-item>
@@ -106,18 +107,16 @@ async function savePassword() {
 :global(.personal-info-dialog) { display: flex; flex-direction: column; max-height: 88dvh; }
 :global(.personal-info-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; }
 :global(.personal-info-dialog .el-dialog__header), :global(.personal-info-dialog .el-dialog__footer) { flex-shrink: 0; }
-.profile-summary { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
-.profile-avatar { display: flex; align-items: center; justify-content: center; width: 62px; height: 62px; flex-shrink: 0; border-radius: 50%; background: #eaf0ff; color: #3268e8; font-size: 22px; font-weight: 600; }
-.profile-summary strong { display: block; margin-bottom: 8px; font-size: 18px; overflow-wrap: anywhere; }
+.profile-summary { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+.profile-avatar { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; background: #eaf0ff; color: #3268e8; font-size: 22px; font-weight: 600; }
+.profile-summary strong { display: block; margin-bottom: 8px; font-size: 17px; overflow-wrap: anywhere; }
 .profile-details :deep(.el-descriptions__label) { display: inline-block; width: 90px; color: #65748c; }
 .profile-details :deep(.el-descriptions__content) { overflow-wrap: anywhere; white-space: pre-wrap; }
 .profile-error { margin-bottom: 16px; }
 .password-section { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--abis-border); }
-.password-section h3 { margin: 0 0 20px; font-size: 16px; }
+.password-section h3 { margin: 0 0 18px; font-size: 15px; }
+.password-section :deep(.el-form-item) { margin-bottom: 20px; }
+.password-section :deep(.el-form-item__label) { font-size: 13px; }
+.password-section :deep(.el-input__wrapper) { min-height: 40px; }
 .password-note { margin: 0; color: #718096; font-size: 12px; line-height: 1.7; }
-@media (max-width: 600px) {
-  .password-section :deep(.el-form-item) { display: block; }
-  .password-section :deep(.el-form-item__label) { display: block; width: auto !important; float: none; height: auto; margin-bottom: 6px; line-height: 22px; text-align: left; }
-  .password-section :deep(.el-form-item__content) { margin-left: 0 !important; }
-}
 </style>

@@ -9,7 +9,11 @@ const browser = await chromium.launch()
 const checks = [], unexpectedRequests = [], browserErrors = []
 const pass = name => { checks.push(name); console.log('PASS', name) }
 const confirm = page => page.locator('.el-message-box').getByRole('button', { name: '确定', exact: true }).click()
-const cancel = page => page.locator('.el-message-box').getByRole('button', { name: '取消', exact: true }).click()
+const cancel = async page => {
+  const box = page.locator('.el-message-box')
+  await box.getByRole('button', { name: '取消', exact: true }).click()
+  await box.waitFor({ state: 'hidden' })
+}
 const logout = async page => {
   await page.getByRole('button', { name: '账户菜单', exact: true }).click()
   await page.getByRole('menuitem', { name: '退出登录', exact: true }).click()
@@ -27,6 +31,37 @@ const loaded = async page => {
 const snapshot = async (page, name) => {
   await page.waitForFunction(() => !document.querySelector('.el-message'))
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true })
+}
+const checkHeader = async (page, label) => {
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  const layout = await page.evaluate(() => {
+    const nav = document.querySelector('.primary-navigation')
+    const rect = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom } }
+    const items = [...nav.querySelectorAll('.el-menu-item,.settings-trigger')].map(rect)
+    return { width: innerWidth, nav: rect(nav), brand: rect(document.querySelector('.brand')), user: rect(document.querySelector('.user')),
+      first: items[0], center: (items[0].left + items.at(-1).right) / 2, scrolls: nav.scrollWidth > nav.clientWidth + 1,
+      font: getComputedStyle(nav.querySelector('.el-menu-item')).fontSize }
+  })
+  assert.equal(layout.font, layout.width <= 600 ? '14px' : '15px')
+  if (!layout.scrolls) assert.ok(Math.abs(layout.center - layout.width / 2) < 1, `${label}: navigation is not centered: ${JSON.stringify(layout)}`)
+  if (layout.width > 1000) {
+    assert.ok(layout.nav.left >= layout.brand.right + 8, `${label}: brand overlap`)
+    assert.ok(layout.nav.right <= layout.user.left - 8, `${label}: account overlap`)
+  } else {
+    assert.ok(layout.nav.top >= Math.max(layout.brand.bottom, layout.user.bottom), `${label}: navigation must have its own row`)
+    assert.ok(layout.first.left >= layout.nav.left - 1, `${label}: first menu item is clipped`)
+  }
+  pass(`${label}: readable centered navigation without control overlap`)
+}
+const checkConfirmation = async (page, label) => {
+  const box = page.locator('.el-message-box')
+  await box.waitFor()
+  const bounds = await box.boundingBox(), width = page.viewportSize().width
+  assert.ok(Math.abs(bounds.width - Math.min(420, width - 32)) < 1, `${label}: invalid width ${bounds.width}`)
+  assert.ok(Math.abs(bounds.x + bounds.width / 2 - width / 2) < 1, `${label}: not centered`)
+  assert.ok(await box.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `${label}: text overflows`)
+  assert.equal(await box.locator('.confirmation-question').count(), 1)
+  pass(`${label}: compact confirmation has centered width and safe text wrapping`)
 }
 const pageNames = { '/monitor': '服务状态监控', '/logs': '日志查询', '/audits': '审计查询', '/threshold': '匹配阈值配置', '/accounts': '账户管理' }
 const go = async (page, path) => {
@@ -158,6 +193,7 @@ async function closeResult(page, title) {
 try {
   const f = await fixture(), p = f.page
   assert.equal(await p.locator('.source-badge,.source-note,.demo-section').count(), 0)
+  await checkHeader(p, 'admin desktop header')
   const cells = row(p, 'fixture-admin').locator('td')
   assert.equal((await cells.nth(4).innerText()).trim(), '2026-08-01 01:02:03')
   assert.equal((await cells.nth(5).innerText()).trim(), '2026-10-26 01:02:03')
@@ -227,6 +263,13 @@ try {
   assert.equal(await profile.getByRole('button', { name: '保存新密码', exact: true }).isVisible(), true)
   await profile.getByRole('button', { name: '关闭', exact: true }).click(); await profile.waitFor({ state: 'hidden' })
   f.state.noProfileFields = false; f.state.failProfile = false
+  const originalDisplayName = f.current.displayName
+  f.current.displayName = '长用户名的界面显示验证'.repeat(12)
+  await p.reload(); await row(p, 'fixture-ops').waitFor()
+  await checkHeader(p, 'long account name desktop header')
+  assert.equal(await p.locator('.user-name').evaluate(el => getComputedStyle(el).textOverflow), 'ellipsis')
+  f.current.displayName = originalDisplayName
+  await p.reload(); await row(p, 'fixture-ops').waitFor()
   pass('closing profile clears password values; missing contact fields show dashes and read failures remain visible')
   await p.getByPlaceholder('搜索用户名或姓名').fill('运维员样本')
   await p.getByRole('button', { name: '查询', exact: true }).click(); await loaded(p)
@@ -236,7 +279,10 @@ try {
   pass('account keyword retains name search despite removal of the name column')
   for (const action of ['禁用', '删除', '重置密码']) {
     const before = f.calls.length
-    await row(p, 'fixture-ops').getByRole('button', { name: action, exact: true }).click(); await cancel(p)
+    await row(p, 'fixture-ops').getByRole('button', { name: action, exact: true }).click()
+    await checkConfirmation(p, `desktop account ${action}`)
+    if (action === '禁用') await snapshot(p, 'confirmation-disable-desktop')
+    await cancel(p)
     assert.equal(f.calls.length, before)
   }
   pass('cancelled account confirmations issue no request')
@@ -334,7 +380,11 @@ try {
   assert.equal(f.calls.filter(c => c.method === 'PUT' && c.path === '/abis/thresholds').length, 0)
   pass('threshold lower-bound validation still blocks invalid submissions')
   await face.fill('85'); await face.blur()
-  await p.getByRole('button', { name: '保存', exact: true }).click(); await cancel(p)
+  await p.getByRole('button', { name: '保存', exact: true }).click()
+  await checkConfirmation(p, 'threshold confirmation')
+  assert.equal(await p.locator('.confirmation-details p').count(), 2)
+  await snapshot(p, 'confirmation-threshold-desktop')
+  await cancel(p)
   assert.equal(f.calls.filter(c => c.method === 'PUT' && c.path === '/abis/thresholds').length, 0)
   await p.getByRole('button', { name: '保存', exact: true }).click(); await confirm(p)
   await p.getByText('阈值已保存', { exact: true }).waitFor()
@@ -382,6 +432,7 @@ try {
   await f.context.close()
 
   const o = await fixture('operator'), op = o.page
+  await checkHeader(op, 'operator desktop header')
   await op.getByRole('button', { name: '设置', exact: true }).click()
   assert.equal(await op.getByRole('menuitem', { name: '账户管理', exact: true }).count(), 0)
   await op.getByRole('menuitem', { name: '匹配阈值配置', exact: true }).click()
@@ -452,6 +503,18 @@ try {
   pass('login validates required fields and displays backend errors without demo content')
   const bounds = await lp.locator('.login-content').boundingBox()
   assert.ok(Math.abs(bounds.x + bounds.width / 2 - 720) < 1)
+  for (const width of [1600, 1280, 1024, 768, 390, 320]) {
+    await lp.setViewportSize({ width, height: 900 })
+    await lp.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    const loginBounds = await lp.locator('.login-content').boundingBox()
+    assert.ok(Math.abs(loginBounds.x + loginBounds.width / 2 - width / 2) < 1)
+    assert.equal(await lp.locator('.login-backdrop').count(), 1)
+    assert.equal(await lp.locator('.biometric-network').isVisible(), width > 600)
+    assert.ok(await lp.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1))
+    assert.equal(await lp.locator('.login-content .brand strong').evaluate(el => getComputedStyle(el).fontSize), width <= 600 ? '28px' : '40px')
+    pass(`login artwork at ${width}px: centered form, responsive decoration and larger brand`)
+  }
+  await lp.setViewportSize({ width: 1440, height: 1000 })
   await lp.getByPlaceholder('请输入用户名').fill('')
   await lp.getByPlaceholder('请输入密码').fill('')
   await snapshot(lp, 'login-desktop')
@@ -479,6 +542,7 @@ try {
     await lp.setViewportSize({ width, height: 900 })
     for (const path of ['/monitor', '/threshold', '/accounts', '/logs', '/audits']) {
       await go(lp, path)
+      if (path === '/monitor') await checkHeader(lp, `header at ${width}px`)
       const widths = await lp.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
       assert.ok(widths.scroll <= widths.client + 1, `${path} at ${width}px: ${JSON.stringify(widths)}`)
       assert.equal(await lp.locator('.source-badge,.source-note,.demo-section').count(), 0)
@@ -503,10 +567,20 @@ try {
         assert.ok(await lp.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1))
         await mobileProfile.getByRole('button', { name: '关闭', exact: true }).click(); await mobileProfile.waitFor({ state: 'hidden' })
       }
+      if (path === '/accounts' && [1024, 390, 320].includes(width)) {
+        const before = login.calls.filter(c => c.method !== 'GET').length
+        await row(lp, 'fixture-ops').getByRole('button', { name: '禁用', exact: true }).click()
+        await checkConfirmation(lp, `account confirmation at ${width}px`)
+        if (width === 390) await snapshot(lp, 'confirmation-disable-mobile')
+        await cancel(lp)
+        assert.equal(login.calls.filter(c => c.method !== 'GET').length, before)
+      }
       pass(`${path} at ${width}px: no overflow or development-mode content`)
     }
   }
-  await logout(lp); await cancel(lp)
+  await logout(lp)
+  await checkConfirmation(lp, 'mobile logout confirmation')
+  await cancel(lp)
   assert.match(lp.url(), /audits/)
   await logout(lp); await confirm(lp)
   await lp.waitForURL('**/login')

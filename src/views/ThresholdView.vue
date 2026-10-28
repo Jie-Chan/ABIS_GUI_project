@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
+import { buildConfirmationMessage } from '@/utils/confirmation'
 import { CONFIRM_TITLE } from '@/constants/nav'
 import {
   THRESHOLD_MIN,
@@ -65,7 +66,10 @@ async function handleSave() {
 
   try {
     await ElMessageBox.confirm(
-      `确认将人脸阈值由 ${origin.value.face} 改为 ${form.value.face}，指纹阈值由 ${origin.value.finger} 改为 ${form.value.finger}？`,
+      buildConfirmationMessage('确认保存阈值配置？', [
+        `人脸阈值：${origin.value.face} → ${form.value.face}`,
+        `指纹阈值：${origin.value.finger} → ${form.value.finger}`,
+      ]),
       CONFIRM_TITLE,
       { type: 'warning' }
     )

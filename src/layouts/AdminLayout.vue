@@ -8,6 +8,7 @@ import { NAV_ITEMS, APP_NAME } from '@/constants/nav'
 import BrandMark from '@/components/BrandMark.vue'
 import UiIcon from '@/components/UiIcon.vue'
 import PersonalInfoDialog from '@/components/PersonalInfoDialog.vue'
+import { buildConfirmationMessage } from '@/utils/confirmation'
 import { PAGE_DESCRIPTIONS } from '@/constants/presentation'
 
 const route = useRoute()
@@ -47,7 +48,7 @@ onUnmounted(() => headerObserver?.disconnect())
 
 async function handleLogout() {
   try {
-    await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(buildConfirmationMessage('确认退出登录？'), '提示', { type: 'warning' })
   } catch {
     return
   }
@@ -116,22 +117,24 @@ async function handleLogout() {
 
 <style scoped>
 .console-layout { min-height: 100vh; flex-direction: column; }
-.header { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 32px; height: 72px; padding: 0 40px; background: var(--abis-navy); color: #d8e2ef; }
+.header { position: sticky; top: 0; z-index: 100; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 32px; height: 72px; padding: 0 40px; background: var(--abis-navy); color: #d8e2ef; }
 .brand { display: flex; flex-shrink: 0; align-items: center; gap: 11px; white-space: nowrap; }
 .brand strong { color: #fff; font-size: 25px; letter-spacing: .5px; }
 .brand > span:last-child { font-size: 12px; }
-.primary-navigation { display: flex; align-items: stretch; min-width: 0; }
+.primary-navigation { display: flex; align-items: stretch; justify-self: center; min-width: 0; }
 .primary-navigation :deep(.el-menu) { height: 72px; border: 0; background: transparent; --el-menu-text-color: #c2cfe2; --el-menu-active-color: #fff; --el-menu-hover-text-color: #fff; --el-menu-hover-bg-color: #223854; --el-menu-bg-color: transparent; --el-menu-horizontal-height: 72px; }
-.primary-navigation :deep(.el-menu-item), .settings-trigger { gap: 9px; padding: 0 20px; font-size: 13px; border-bottom: 3px solid transparent; }
+.primary-navigation :deep(.el-menu-item), .settings-trigger { gap: 9px; padding: 0 20px; font-size: 15px; border-bottom: 3px solid transparent; }
 .primary-navigation :deep(.el-menu-item.is-active), .settings-trigger.is-active { border-bottom-color: #4b87ff; background: transparent; font-weight: 600; color: #fff; }
 .settings-trigger { display: flex; align-items: center; height: 72px; border-top: 0; border-left: 0; border-right: 0; background: transparent; color: #c2cfe2; white-space: nowrap; }
 .settings-trigger:hover { background: #223854; color: #fff; }
 .settings-chevron { transform: rotate(90deg); }
-.user { display: flex; flex-shrink: 0; align-items: center; gap: 12px; margin-left: auto; font-size: 12px; white-space: nowrap; }
-.avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; margin-left: 4px; }
-.account-trigger { display: flex; align-items: center; gap: 12px; min-height: 42px; max-width: 100%; padding: 0; border: 0; background: transparent; color: #d8e2ef; font-size: 12px; }
-.account-trigger:hover { color: #fff; }
-.account-chevron { transform: rotate(90deg); flex-shrink: 0; }
+.user { display: flex; align-items: center; justify-self: end; gap: 12px; min-width: 0; max-width: 100%; font-size: 12px; white-space: nowrap; }
+.user :deep(.el-dropdown) { min-width: 0; }
+.account-trigger { display: flex; align-items: center; gap: 10px; min-height: 42px; max-width: min(300px, 100%); padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #d8e2ef; font-size: 12px; }
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: #263c58; }
+.account-chevron { transform: rotate(90deg); }
+.avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; }
+.user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #acbdd4; }
 .workspace-main { width: 100%; min-width: 0; padding: 28px 48px; overflow: visible; }
 .breadcrumb { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 12px; }
@@ -147,15 +150,13 @@ async function handleLogout() {
   .primary-navigation :deep(.ui-icon) { display: none; }
   .primary-navigation :deep(.settings-chevron) { display: inline-block; }
   .user { gap: 10px; }
-  .account-trigger { display: flex; align-items: center; gap: 12px; min-height: 42px; max-width: 100%; padding: 0; border: 0; background: transparent; color: #d8e2ef; font-size: 12px; }
-.account-trigger:hover { color: #fff; }
-.account-chevron { transform: rotate(90deg); flex-shrink: 0; }
-.user-role { display: none; }
+  .user-role { display: none; }
   .workspace-main { padding: 28px; }
 }
 @media (max-width: 1000px) {
-  .header { height: auto; min-height: 72px; flex-wrap: wrap; gap: 0 20px; padding: 16px 24px 0; }
-  .primary-navigation { order: 3; flex-basis: 100%; margin-top: 12px; overflow-x: auto; }
+  .header { display: flex; height: auto; min-height: 72px; flex-wrap: wrap; gap: 0 20px; padding: 16px 24px 0; }
+  .user { margin-left: auto; }
+  .primary-navigation { order: 3; flex-basis: 100%; justify-content: safe center; margin-top: 12px; overflow-x: auto; }
   .primary-navigation :deep(.el-menu) { flex-shrink: 0; height: 48px; --el-menu-horizontal-height: 48px; }
   .primary-navigation :deep(.el-dropdown) { flex-shrink: 0; }
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding: 0 18px; }
@@ -169,8 +170,8 @@ async function handleLogout() {
   .brand > span:last-child, .user-name { display: none; }
   .brand :deep(.brand-mark) { width: 24px; height: 24px; }
   .user { gap: 8px; }
-  .account-trigger { gap: 8px; }
-  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 12px; padding-right: 12px; gap: 6px; font-size: 12px; }
+  .account-trigger { gap: 7px; padding: 4px; }
+  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 12px; padding-right: 12px; gap: 6px; font-size: 14px; }
   .primary-navigation :deep(.ui-icon) { display: none; }
   .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }
   .workspace-main { padding: 22px 16px; }
