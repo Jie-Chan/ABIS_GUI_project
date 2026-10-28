@@ -37,3 +37,14 @@ export function canResetAccountPassword(role, targetRole, actorId, targetId) {
 export function canDeleteAccount(role, targetRole, actorId, targetId) {
   return hasPermission(role, PERMISSION.ACCOUNT_DELETE) && isOtherOperator(targetRole, actorId, targetId)
 }
+
+export function canChangeAccountRole(role, targetRole, actorId, targetId) {
+  return hasPermission(role, PERMISSION.ACCOUNT_MANAGE) && isOtherOperator(targetRole, actorId, targetId)
+}
+
+export function canToggleAccountEnabled(role, targetRole, actorId, targetId, enabled) {
+  if (!hasPermission(role, PERMISSION.ACCOUNT_MANAGE) || !validId(actorId) || !validId(targetId) || String(actorId) === String(targetId) || typeof enabled !== 'boolean') return false
+  // Other operators can be enabled/disabled. An already disabled administrator
+  // can be restored, but an enabled administrator must never be disabled here.
+  return targetRole === ROLE.OPERATOR || (targetRole === ROLE.ADMIN && enabled === false)
+}

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRemote, unwrap, health, page, accountPage, responseMessage, exportFile } from '../src/api/adapters/remote.js'
-import { PERMISSION, hasPermission, canResetAccountPassword, canDeleteAccount } from '../src/constants/roles.js'
+import { PERMISSION, hasPermission, canResetAccountPassword, canDeleteAccount, canChangeAccountRole, canToggleAccountEnabled } from '../src/constants/roles.js'
 
 test('业务失败、空结构不被当成真实数据', () => {
   assert.throws(() => unwrap({ code: 1, msg: '拒绝' }), /拒绝/)
@@ -148,6 +148,37 @@ test('新权限矩阵：运维员可配置阈值但不能访问账户，管理�
       assert.equal(allowed('admin', 'operator', 'actor', id), false)
     }
   }
+})
+
+test('角色修改仅允许管理员操作其他运维员，禁止本人、管理员和身份不完整的目标', () => {
+  for (const actor of ['admin', 'operator', '', 'unknown']) {
+    for (const target of ['admin', 'operator', '', 'unknown']) {
+      assert.equal(canChangeAccountRole(actor, target, 'actor', 'target'), actor === 'admin' && target === 'operator')
+    }
+  }
+  assert.equal(canChangeAccountRole('admin', 'operator', '7', 7), false)
+  assert.equal(canChangeAccountRole('admin', 'admin', '7', 7), false)
+  for (const id of [null, undefined, '', ' ', {}, NaN]) {
+    assert.equal(canChangeAccountRole('admin', 'operator', id, 'target'), false)
+    assert.equal(canChangeAccountRole('admin', 'operator', 'actor', id), false)
+  }
+})
+
+test('启停保护：禁止禁用本人或管理员，允许启停其他运维员及恢复已禁用的其他管理员', () => {
+  for (const actor of ['admin', 'operator', '', 'unknown']) {
+    for (const target of ['admin', 'operator', '', 'unknown']) {
+      for (const enabled of [true, false]) {
+        const allowed = actor === 'admin' && (target === 'operator' || (target === 'admin' && !enabled))
+        assert.equal(canToggleAccountEnabled(actor, target, 'actor', 'target', enabled), allowed)
+        assert.equal(canToggleAccountEnabled(actor, target, '7', 7, enabled), false)
+      }
+    }
+  }
+  for (const id of [null, undefined, '', ' ', {}, NaN]) {
+    assert.equal(canToggleAccountEnabled('admin', 'operator', id, 'target', true), false)
+    assert.equal(canToggleAccountEnabled('admin', 'operator', 'actor', id, false), false)
+  }
+  for (const enabled of [null, undefined, '', 'false', 0, 1]) assert.equal(canToggleAccountEnabled('admin', 'operator', 'actor', 'target', enabled), false)
 })
 
 test('后端 detail 错误可显示，校验错误不回显输入密码', () => {

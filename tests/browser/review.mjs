@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import { reviewMonitor } from './monitor.mjs'
 
 const base = new URL(process.env.ABIS_TEST_URL || 'http://127.0.0.1:5190').origin
 const out = process.env.ABIS_QA_OUTPUT_DIR || './qa-output'
@@ -30,7 +31,7 @@ const loaded = async page => {
 }
 const snapshot = async (page, name) => {
   await page.waitForFunction(() => !document.querySelector('.el-message'))
-  await page.screenshot({ path: `${out}/${name}.png`, fullPage: true })
+  await page.screenshot({ path: `${out}/${name}.png`, fullPage: true, animations: 'disabled' })
 }
 const checkHeader = async (page, label) => {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
@@ -79,7 +80,7 @@ const trackErrors = page => {
   })
 }
 
-async function fixture(role = 'admin', authenticated = true) {
+async function fixture(role = 'admin', authenticated = true, initialState = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce', serviceWorkers: 'block' })
   await context.addInitScript(authenticated => {
     if (authenticated && !sessionStorage.getItem('abis_qa_seeded')) {
@@ -90,13 +91,14 @@ async function fixture(role = 'admin', authenticated = true) {
   const current = { id: role === 'admin' ? 'admin-fixture' : 'ops-current', username: 'fixture-current', displayName: '当前测试用户', role, enabled: true, phone: '13800000000', email: 'current@example.com', remark: '当前账户备注' }
   let rows = [
     { id: 'admin-fixture', username: 'fixture-admin', displayName: '管理员样本', role: 'admin', enabled: true, createdAt: '2026-08-01 01:02:03', updatedAt: '2026-10-26 01:02:03', lastLoginAt: null },
-    { id: 'admin-other', username: 'other-admin', displayName: '其他管理员', role: 'admin', enabled: true, createdAt: null, lastLoginAt: null },
+    { id: 'admin-other', username: 'other-admin', displayName: '其他管理员', role: 'admin', enabled: initialState.otherAdminEnabled ?? true, createdAt: null, lastLoginAt: null },
     { id: 'ops-target', username: 'fixture-ops', displayName: '运维员样本', role: 'operator', enabled: true, createAt: '2026-10-01 01:02:03', updateAt: '2026-10-27 04:05:06', lastLoginAt: null },
   ]
   const calls = []
-  const state = { resetMode: 'missing', failList: false, failMonitor: false, emptyList: false, failLogout: false, expire: false, exportMode: 'file', passwordMode: 'missing', failProfile: false, noProfileFields: false }
+  const state = { resetMode: 'missing', failList: false, failMonitor: false, emptyList: false, failLogout: false, expire: false, exportMode: 'file', passwordMode: 'missing', failProfile: false, noProfileFields: false, monitorSnapshot: null, ...initialState }
   let thresholds = { face: 80, finger: 70 }
   const page = await context.newPage()
+  if (initialState.clock) await page.clock.install()
   page.setDefaultTimeout(10000)
   trackErrors(page)
   // Every API request is fulfilled locally, including reads and authentication.
@@ -161,7 +163,9 @@ async function fixture(role = 'admin', authenticated = true) {
       if (method === 'DELETE') { rows = rows.filter(r => r.id !== id[1]); return reply(true) }
     }
     if (path === '/abis/monitor/snapshot') {
+      if (state.monitorGate) await state.monitorGate
       if (state.failMonitor) return reply({ detail: '监控读取测试失败' }, 500)
+      if (state.monitorSnapshot) return reply(state.monitorSnapshot)
       return reply({ fetchedAt: '2026-10-27 10:00:00', items: [
         { key: 'face', name: '缺失指标样本', layer: '算法层', status: 'normal', instances: [], metrics: {} },
         { key: 'fingerprint', name: '零值指标样本', layer: '算法层', status: 'abnormal', instances: [{ id: 'fingerprint-1', status: 'abnormal' }], metrics: { cdcHealthy: false, cdcReady: false, galleryTotalSize: 0, licenseStatus: null } },
@@ -204,6 +208,24 @@ try {
   }
   for (const action of ['删除', '重置密码']) assert.equal(await row(p, 'fixture-ops').getByRole('button', { name: action, exact: true }).count(), 1)
   pass('administrator rows never expose delete/reset; both actions remain available on other operator rows')
+  const beforeProtectedDisable = f.calls.length
+  for (const name of ['fixture-admin', 'other-admin']) {
+    const disable = row(p, name).getByRole('button', { name: '禁用', exact: true })
+    assert.ok(await disable.isDisabled())
+    assert.ok(await disable.evaluate(button => {
+      const probe = document.createElement('span')
+      probe.style.color = 'var(--el-text-color-placeholder)'
+      button.parentElement.append(probe)
+      const expected = getComputedStyle(probe).color
+      probe.remove()
+      return getComputedStyle(button).color === expected
+    }))
+    await disable.evaluate(button => button.click())
+  }
+  assert.ok(await row(p, 'fixture-ops').getByRole('button', { name: '禁用', exact: true }).isEnabled())
+  assert.equal(await p.locator('.el-message-box:visible').count(), 0)
+  assert.equal(f.calls.length, beforeProtectedDisable)
+  pass('self and other administrator disable buttons stay visible but disabled; no confirmation or request is issued')
   await p.reload(); await row(p, 'fixture-ops').waitFor()
   assert.equal(f.calls.filter(c => c.path === '/system/auth/get-permission-info').length, 2)
   assert.ok(f.calls.every(c => c.authorization === 'Bearer fixture-token'))
@@ -347,6 +369,50 @@ try {
   await p.locator('.el-message-box').getByRole('button', { name: '删除', exact: true }).click()
   await row(p, 'created-fixture-user').waitFor({ state: 'detached' })
   pass('delete uses actual ID and refreshes the list')
+  for (const [username, id] of [['fixture-admin', 'admin-fixture'], ['other-admin', 'admin-other']]) {
+    await row(p, username).getByRole('button', { name: '编辑', exact: true }).click()
+    await edit.waitFor()
+    assert.ok(await edit.getByRole('combobox').isDisabled())
+    await edit.getByText('本人及管理员账户的角色不可修改。', { exact: true }).waitFor()
+    assert.ok(await edit.locator('input').nth(1).isEnabled())
+    assert.ok(await edit.locator('input[type=tel]').isEnabled())
+    await edit.locator('input[type=tel]').fill('13700000000')
+    const before = f.calls.length
+    await edit.getByRole('button', { name: '确定', exact: true }).click(); await confirm(p)
+    await edit.waitFor({ state: 'hidden' }); await loaded(p)
+    const update = f.calls.slice(before).find(c => c.method === 'PUT' && c.path === `/system/user/${id}`)
+    assert.ok(update)
+    assert.equal(update.body.role, undefined)
+    assert.equal(update.body.phone, '13700000000')
+    assert.equal((await row(p, username).locator('td').nth(2).innerText()).trim(), '管理员')
+    if (id === f.current.id) assert.ok(f.calls.slice(before).some(c => c.path === '/system/auth/get-permission-info'))
+    pass(`${username}: administrator role is locked; other details save without submitting role`)
+  }
+  await row(p, 'fixture-ops').getByRole('button', { name: '编辑', exact: true }).click()
+  await edit.waitFor()
+  assert.ok(await edit.getByRole('combobox').isEnabled())
+  await edit.locator('.el-select__wrapper').click()
+  await p.getByRole('option', { name: '管理员', exact: true }).click()
+  await edit.getByRole('button', { name: '确定', exact: true }).click(); await confirm(p)
+  await edit.waitFor({ state: 'hidden' }); await loaded(p)
+  assert.equal(f.calls.filter(c => c.method === 'PUT' && c.path === '/system/user/ops-target').at(-1).body.role, 'admin')
+  pass('other operator roles remain editable and an explicitly chosen promotion reaches the API')
+  await row(p, 'fixture-ops').getByRole('button', { name: '编辑', exact: true }).click()
+  await edit.waitFor()
+  assert.ok(await edit.getByRole('combobox').isDisabled())
+  assert.ok(await row(p, 'fixture-ops').getByRole('button', { name: '禁用', exact: true }).isDisabled())
+  const beforeLockedCancel = f.calls.length
+  await edit.getByRole('button', { name: '取消', exact: true }).click(); await edit.waitFor({ state: 'hidden' })
+  assert.equal(f.calls.length, beforeLockedCancel)
+  pass('a promoted administrator becomes role-locked after reread; cancelling sends no update')
+  await p.getByRole('button', { name: '新建账户', exact: true }).click()
+  await create.waitFor()
+  assert.ok(await create.getByRole('combobox').isEnabled())
+  await create.locator('.el-select__wrapper').click()
+  await p.getByRole('option', { name: '管理员', exact: true }).click()
+  assert.equal(await create.getByText('本人及管理员账户的角色不可修改。', { exact: true }).count(), 0)
+  await create.getByRole('button', { name: '取消', exact: true }).click(); await create.waitFor({ state: 'hidden' })
+  pass('new-account role selection remains available after editing protected administrators')
   f.state.emptyList = true
   await p.getByRole('button', { name: '查询', exact: true }).click(); await loaded(p)
   await p.locator('.el-table__empty-text').waitFor()
@@ -358,18 +424,18 @@ try {
   f.state.failList = false
   await go(p, '/monitor')
   assert.deepEqual(await p.locator('.status-overview dd').allTextContents(), ['3', '1', '1', '1'])
-  assert.equal(await row(p, '缺失指标样本').locator('.algorithm-metrics').innerText().then(t => (t.match(/未知/g) || []).length), 4)
-  assert.equal(await row(p, '缺失指标样本').locator('.metric-error').count(), 0)
-  assert.match(await row(p, '零值指标样本').innerText(), /底库规模：0/)
-  assert.match(await row(p, '零值指标样本').innerText(), /CDC 链路健康：异常/)
-  await row(p, '缺失指标样本').locator('.el-table__expand-icon').click()
-  await p.getByText('暂无实例明细。', { exact: true }).waitFor()
-  pass('missing monitor metrics show unknown; false and zero are preserved; no instances are not mislabelled undeployed')
+  const missingMetrics = p.locator('[data-service="face"]')
+  const zeroMetrics = p.locator('[data-service="fingerprint"]')
+  assert.deepEqual(await missingMetrics.locator('.algorithm-metrics dd').allTextContents(), ['未知', '未知'])
+  assert.deepEqual(await zeroMetrics.locator('.algorithm-metrics dd').allTextContents(), ['0', '未知'])
+  assert.doesNotMatch(await p.locator('.monitor-page').innerText(), /CDC|License/)
+  await missingMetrics.getByText('暂无实例信息。', { exact: true }).waitFor()
+  pass('missing monitor metrics show unknown; zero is preserved; CDC is hidden and absent instances are not mislabelled undeployed')
   f.state.failMonitor = true
   await p.getByRole('button', { name: '立即刷新', exact: true }).click()
   await p.getByText('监控读取测试失败', { exact: true }).waitFor()
   await p.getByText('读取失败，以下保留上次成功获取的数据。', { exact: true }).waitFor()
-  assert.equal(await p.locator('.el-table__row').count(), 3)
+  assert.equal(await p.locator('.service-card').count(), 3)
   pass('failed monitoring refresh preserves and identifies the previous snapshot')
   await go(p, '/threshold')
   const face = p.locator('.threshold-field input').first()
@@ -523,12 +589,11 @@ try {
   await lp.getByRole('button', { name: '登录', exact: true }).click()
   await lp.waitForURL('**/monitor'); await loaded(lp)
   assert.equal(await lp.evaluate(() => sessionStorage.getItem('abis_remote_token')), 'fixture-token')
-  await row(lp, '零值指标样本').locator('.el-table__expand-icon').click()
   await lp.getByText('fingerprint-1', { exact: false }).waitFor()
   await lp.getByRole('button', { name: '立即刷新', exact: true }).click(); await loaded(lp)
   await lp.getByText('fingerprint-1', { exact: false }).waitFor()
   assert.deepEqual(await lp.locator('.status-overview dd').allTextContents(), ['3', '1', '1', '1'])
-  pass('real login stores the tab session; monitoring refresh preserves expanded instances and summary')
+  pass('real login stores the tab session; monitoring refresh keeps instances directly visible and preserves summary')
   await snapshot(lp, 'monitor-desktop')
   const settings = lp.getByRole('button', { name: '设置', exact: true })
   await settings.focus(); await lp.keyboard.press('Enter')
@@ -547,6 +612,8 @@ try {
       assert.ok(widths.scroll <= widths.client + 1, `${path} at ${width}px: ${JSON.stringify(widths)}`)
       assert.equal(await lp.locator('.source-badge,.source-note,.demo-section').count(), 0)
       if (width === 390 && path === '/accounts') {
+        assert.ok(await row(lp, 'fixture-admin').getByRole('button', { name: '禁用', exact: true }).isDisabled())
+        assert.ok(await row(lp, 'other-admin').getByRole('button', { name: '禁用', exact: true }).isDisabled())
         assert.ok(await lp.evaluate(() => {
           const cell = document.querySelector('.el-table__body .el-table__row td:nth-child(2)'), r = cell.getBoundingClientRect()
           return cell.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))
@@ -566,6 +633,14 @@ try {
         assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 900, 'mobile profile footer stays within viewport')
         assert.ok(await lp.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1))
         await mobileProfile.getByRole('button', { name: '关闭', exact: true }).click(); await mobileProfile.waitFor({ state: 'hidden' })
+        await row(lp, 'fixture-admin').getByRole('button', { name: '编辑', exact: true }).click()
+        const protectedEdit = lp.getByRole('dialog', { name: '编辑账户', exact: true })
+        await protectedEdit.waitFor()
+        assert.ok(await protectedEdit.getByRole('combobox').isDisabled())
+        assert.ok(await lp.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1))
+        await snapshot(lp, 'administrator-role-locked-mobile')
+        await protectedEdit.getByRole('button', { name: '取消', exact: true }).click(); await protectedEdit.waitFor({ state: 'hidden' })
+        pass('mobile administrator edit retains the locked role and readable form without overflow')
       }
       if (path === '/accounts' && [1024, 390, 320].includes(width)) {
         const before = login.calls.filter(c => c.method !== 'GET').length
@@ -593,6 +668,24 @@ try {
   await snapshot(lp, 'login-mobile')
   pass('logout cancellation and success retained; login remains centered at 390/320px')
   await login.context.close()
+
+  const recover = await fixture('admin', true, { otherAdminEnabled: false }), rp = recover.page
+  const enableAdmin = row(rp, 'other-admin').getByRole('button', { name: '启用', exact: true })
+  assert.ok(await enableAdmin.isEnabled())
+  const beforeRecovery = recover.calls.filter(c => c.method === 'PUT').length
+  await enableAdmin.click(); await cancel(rp)
+  assert.equal(recover.calls.filter(c => c.method === 'PUT').length, beforeRecovery)
+  await enableAdmin.click(); await confirm(rp)
+  await row(rp, 'other-admin').getByRole('button', { name: '禁用', exact: true }).waitFor()
+  const recoveryRequest = recover.calls.filter(c => c.method === 'PUT').at(-1)
+  assert.equal(recoveryRequest.path, '/system/user/admin-other')
+  assert.deepEqual(recoveryRequest.body, { enabled: true })
+  assert.ok(await row(rp, 'other-admin').getByRole('button', { name: '禁用', exact: true }).isDisabled())
+  await snapshot(rp, 'administrator-disable-protected')
+  pass('disabled other administrators can be restored with confirmation; disabling is locked after reread')
+  await recover.context.close()
+
+  await reviewMonitor({ fixture, loaded, go, snapshot, pass })
 
   assert.deepEqual(unexpectedRequests, [])
   assert.deepEqual(browserErrors, [])

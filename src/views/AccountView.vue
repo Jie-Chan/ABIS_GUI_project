@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import { ROLE, ROLE_LABEL, PERMISSION, canResetAccountPassword, canDeleteAccount } from '@/constants/roles'
+import { ROLE, ROLE_LABEL, PERMISSION, canResetAccountPassword, canDeleteAccount, canChangeAccountRole, canToggleAccountEnabled } from '@/constants/roles'
 import { buildConfirmationMessage } from '@/utils/confirmation'
 import { optionalAccountFields } from '@/utils/account'
 import { CONFIRM_TITLE } from '@/constants/nav'
@@ -24,6 +24,8 @@ const dialogVisible = ref(false)
 const dialogMode = ref('create')
 const emptyForm = () => ({ id: null, username: '', displayName: '', role: ROLE.OPERATOR, ...optionalAccountFields() })
 const form = ref(emptyForm())
+const editTarget = ref(null)
+const canEditRole = computed(() => dialogMode.value === 'create' || canChangeAccountRole(auth.role, editTarget.value?.role, auth.account?.id, editTarget.value?.id))
 const accountFormRef = ref(null)
 const formRules = {
   username: [{ required: true, whitespace: true, message: '请输入用户名', trigger: 'blur' }],
@@ -70,6 +72,7 @@ async function reloadAfterWrite() {
 function openCreate() {
   if (!canManage.value) return
   dialogMode.value = 'create'
+  editTarget.value = null
   form.value = emptyForm()
   dialogVisible.value = true
 }
@@ -77,6 +80,7 @@ function openCreate() {
 function openEdit(row) {
   if (!canManage.value) return
   dialogMode.value = 'edit'
+  editTarget.value = { id: row.id, role: row.role }
   form.value = { ...row, ...optionalAccountFields(row) }
   dialogVisible.value = true
 }
@@ -104,6 +108,7 @@ function clearCredential() {
 const isSelf = row => auth.account?.id != null && String(row.id) === String(auth.account.id)
 const canDelete = row => canDeleteAccount(auth.role, row.role, auth.account?.id, row.id)
 const canReset = row => canResetAccountPassword(auth.role, row.role, auth.account?.id, row.id)
+const canToggle = row => canToggleAccountEnabled(auth.role, row.role, auth.account?.id, row.id, row.enabled)
 
 async function leaveSession() {
   auth.clearSession()
@@ -118,20 +123,35 @@ async function handleSubmit() {
     return
   }
   if (!await accountFormRef.value?.validate().catch(() => false)) return
+  // Check the original target, not the editable form role. Locked roles are
+  // omitted entirely so saving other details cannot overwrite a server role.
+  const target = editTarget.value
+  const mode = dialogMode.value
+  if (mode === 'edit' && (!target || String(form.value.id) !== String(target.id))) {
+    ElMessage.warning('账户信息已变化，请关闭后重新编辑')
+    return
+  }
+  if (mode === 'edit' && !canEditRole.value && form.value.role !== target.role) {
+    ElMessage.warning('不能修改本人或管理员账户的角色')
+    return
+  }
+  const values = { ...form.value }
+  const payload = { displayName: values.displayName.trim(), ...optionalAccountFields(values) }
+  if (canEditRole.value) payload.role = values.role
   if (!await confirmAction('确认保存账户信息？')) return
   saving.value = true
   try {
-    if (dialogMode.value === 'create') {
-      const username = form.value.username.trim()
-      const result = await api.createAccount({ username, displayName: form.value.displayName.trim(), role: form.value.role, ...optionalAccountFields(form.value) })
+    if (mode === 'create') {
+      const username = values.username.trim()
+      const result = await api.createAccount({ username, ...payload })
       dialogVisible.value = false
       ElMessage.success('账户已创建')
       showCredential('账户创建结果', username, result)
     } else {
-      await api.updateAccount(form.value.id, { displayName: form.value.displayName.trim(), role: form.value.role, ...optionalAccountFields(form.value) })
+      await api.updateAccount(target.id, payload)
       dialogVisible.value = false
       ElMessage.success('账户已更新')
-      if (isSelf(form.value)) {
+      if (isSelf(target)) {
         try { await auth.refreshAccount() }
         catch { await leaveSession(); return }
       }
@@ -145,7 +165,7 @@ async function handleSubmit() {
 }
 
 async function toggleEnabled(row) {
-  if (!canManage.value) return
+  if (!canToggle(row)) return
   const next = !row.enabled
   if (!await confirmAction(buildConfirmationMessage(`确认${next ? '启用' : '禁用'}账户「${row.username}」？`, [next ? '启用后允许该账户登录。' : '禁用后该账户不可登录。']))) return
   saving.value = true
@@ -236,7 +256,7 @@ onMounted(load)
         <el-table-column label="操作" :width="canManage ? 280 : 130" fixed="right">
           <template #default="{ row }">
             <el-button v-if="canManage" link type="primary" :disabled="saving || loading" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="canManage" link type="primary" :disabled="saving || loading" @click="toggleEnabled(row)">{{ row.enabled ? '禁用' : '启用' }}</el-button>
+            <el-button v-if="canManage" link type="primary" :class="{ 'account-status-locked': !canToggle(row) }" :disabled="saving || loading || !canToggle(row)" @click="toggleEnabled(row)">{{ row.enabled ? '禁用' : '启用' }}</el-button>
             <el-button v-if="canReset(row)" link type="primary" :disabled="saving || loading" @click="handleResetPassword(row)">重置密码</el-button>
             <el-button v-if="canDelete(row)" link type="danger" :disabled="saving || loading" @click="handleDelete(row)">删除</el-button>
             <span v-if="!canManage && !canReset(row)" class="read-only">仅可查看</span>
@@ -251,7 +271,10 @@ onMounted(load)
       <el-form ref="accountFormRef" :model="form" :rules="formRules" label-width="90px" :disabled="saving">
         <el-form-item label="用户名" prop="username"><el-input v-model="form.username" :disabled="dialogMode === 'edit'" /></el-form-item>
         <el-form-item label="姓名" prop="displayName"><el-input v-model="form.displayName" /></el-form-item>
-        <el-form-item label="角色" prop="role"><el-select v-model="form.role" style="width: 100%"><el-option v-for="o in roleOptions" :key="o.value" :label="o.label" :value="o.value" /></el-select></el-form-item>
+        <el-form-item label="角色" prop="role">
+          <el-select v-model="form.role" :disabled="!canEditRole" style="width: 100%"><el-option v-for="o in roleOptions" :key="o.value" :label="o.label" :value="o.value" /></el-select>
+          <span v-if="dialogMode === 'edit' && !canEditRole" class="role-hint">本人及管理员账户的角色不可修改。</span>
+        </el-form-item>
         <el-form-item label="电话" prop="phone"><el-input v-model="form.phone" type="tel" placeholder="-" /></el-form-item>
         <el-form-item label="邮箱" prop="email"><el-input v-model="form.email" placeholder="-" /></el-form-item>
         <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" placeholder="-" /></el-form-item>
@@ -275,6 +298,8 @@ onMounted(load)
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .spacer { flex: 1; }
 .note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
+.role-hint { color: #718096; font-size: 12px; line-height: 1.8; margin-top: 4px; }
+.account-page .el-button.account-status-locked.is-disabled { color: var(--el-text-color-placeholder); }
 @media (max-width: 767px) {
   .account-page :deep(.el-table-fixed-column--right) { position: static !important; }
   .account-page :deep(.el-table-fixed-column--right::before) { display: none; }

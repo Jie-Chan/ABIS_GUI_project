@@ -1,4 +1,16 @@
 /** 监控展示使用的状态、指标和刷新周期；对象与实例来自接口快照。 */
+/** 仅用于名称与图标映射；页面对象数量、顺序和状态仍来自真实快照。 */
+export const MONITOR_TARGET = {
+  GATEWAY: 'gateway',
+  SYSTEM: 'system',
+  FACE: 'face',
+  FINGERPRINT: 'fingerprint',
+  POSTGRESQL: 'postgresql',
+  MINIO: 'minio',
+}
+export const ALGO_TARGETS = [MONITOR_TARGET.FACE, MONITOR_TARGET.FINGERPRINT]
+export const LICENSE_STATUS = { VALID: 'VALID', INVALID: 'INVALID' }
+
 export const MONITOR_STATUS = {
   NORMAL: 'normal',
   ABNORMAL: 'abnormal',
