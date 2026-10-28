@@ -6,6 +6,7 @@
 /** 阈值取值范围 —— 需求 1.2：1–100 的整数（上限 100 为产品设定值） */
 export const THRESHOLD_MIN = 1
 export const THRESHOLD_MAX = 100
+export const DEFAULT_THRESHOLDS = Object.freeze({ face: 60, finger: 60 })
 
 /**
  * 两类阈值 —— 需求 1.2 配置范围，仅此两项。

@@ -22,14 +22,6 @@
  */
 
 /**
- * @typedef {Object} MonitorMetrics
- * @property {boolean} cdcHealthy
- * @property {boolean} cdcReady
- * @property {number}  galleryTotalSize
- * @property {'VALID'|'INVALID'} licenseStatus
- */
-
-/**
  * @typedef {Object} MonitorItem
  * @property {string} key
  * @property {string} name
@@ -37,11 +29,7 @@
  * @property {'normal'|'abnormal'|'unreachable'|'not_deployed'} status
  * @property {Array<{id: string, status: string}>} instances
  * @property {boolean} optional
- * @property {MonitorMetrics} [metrics]  仅算法服务有
- *
- * ⚠ metrics **不保证存在**：非算法服务对象上它可能是缺失的键，
- *   也可能是存在但为 undefined 的键（取决于适配器是否经过序列化边界）。
- *   消费方一律按真值判断（`if (item.metrics)`），不得使用 `'metrics' in item`。
+ * @property {Object|null} [metrics] 后端原始扩展指标，当前页面不展示
  */
 
 /**

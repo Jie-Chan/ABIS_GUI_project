@@ -168,12 +168,17 @@ async function fixture(role = 'admin', authenticated = true, initialState = {}) 
       if (state.monitorSnapshot) return reply(state.monitorSnapshot)
       return reply({ fetchedAt: '2026-10-27 10:00:00', items: [
         { key: 'face', name: '缺失指标样本', layer: '算法层', status: 'normal', instances: [], metrics: {} },
-        { key: 'fingerprint', name: '零值指标样本', layer: '算法层', status: 'abnormal', instances: [{ id: 'fingerprint-1', status: 'abnormal' }], metrics: { cdcHealthy: false, cdcReady: false, galleryTotalSize: 0, licenseStatus: null } },
+        { key: 'fingerprint', name: '零值指标样本', layer: '算法层', status: 'abnormal', instances: [{ id: 'fingerprint-1', status: 'abnormal' }], metrics: { cdcHealthy: false, cdcReady: false, galleryCapacityLimit: 0, licenseStatus: null } },
         { key: 'minio', name: 'MinIO', layer: '数据层', status: 'not_deployed', instances: [] },
       ] })
     }
     if (path === '/abis/thresholds') {
-      if (method === 'PUT') { thresholds = req.postDataJSON(); return reply(true) }
+      if (method === 'PUT') {
+        if (state.failThresholdWrite) return reply({ detail: '阈值保存测试失败' }, 500)
+        thresholds = req.postDataJSON()
+        return reply(true)
+      }
+      if (state.failThresholdRead) return reply({ detail: '阈值回读测试失败' }, 500)
       return reply(thresholds)
     }
     if (path === '/abis/call-log/page') return reply({ items: [{ id: 'fixture-log', calledAt: '2026-10-27 10:00:00', caller: '真实列表拦截样本', api: 'comparison', feature: 'face', result: 'success', costMs: 0 }], total: 1 })
@@ -249,6 +254,24 @@ try {
   await profile.getByText('请输入原密码', { exact: true }).waitFor()
   assert.equal(passwordRequests().length, 0)
   await profile.getByPlaceholder('请输入原密码', { exact: true }).fill('OldFixture!23')
+  await profile.getByText('新密码必须大于 6 位（至少 7 位）。', { exact: true }).waitFor()
+  for (const short of ['Ab!12', 'Ab!123']) {
+    await profile.getByPlaceholder('请输入新密码', { exact: true }).fill(short)
+    await profile.getByPlaceholder('请再次输入新密码', { exact: true }).fill(short)
+    await profile.getByRole('button', { name: '保存新密码', exact: true }).click()
+    await profile.getByText('新密码长度必须大于 6 位', { exact: true }).waitFor()
+    assert.equal(await p.locator('.el-message-box:visible').count(), 0)
+    assert.equal(passwordRequests().length, 0)
+  }
+  pass('new-password length hint is visible; five and six characters are rejected before confirmation or requests')
+  await profile.getByPlaceholder('请输入新密码', { exact: true }).fill('Ab!1234')
+  await profile.getByPlaceholder('请再次输入新密码', { exact: true }).fill('Ab!1234')
+  await profile.getByRole('button', { name: '保存新密码', exact: true }).click()
+  await p.locator('.el-message-box').waitFor()
+  await profile.getByText('新密码长度必须大于 6 位', { exact: true }).waitFor({ state: 'hidden' })
+  await cancel(p)
+  assert.equal(passwordRequests().length, 0)
+  pass('exactly seven new-password characters pass validation; cancelled confirmation sends no request')
   await profile.getByPlaceholder('请输入新密码', { exact: true }).fill('OldFixture!23')
   await profile.getByPlaceholder('请再次输入新密码', { exact: true }).fill('different')
   await profile.getByRole('button', { name: '保存新密码', exact: true }).click()
@@ -423,14 +446,11 @@ try {
   pass('empty results and failed account reads remain distinct; stale actions are cleared')
   f.state.failList = false
   await go(p, '/monitor')
-  assert.deepEqual(await p.locator('.status-overview dd').allTextContents(), ['3', '1', '1', '1'])
-  const missingMetrics = p.locator('[data-service="face"]')
-  const zeroMetrics = p.locator('[data-service="fingerprint"]')
-  assert.deepEqual(await missingMetrics.locator('.algorithm-metrics dd').allTextContents(), ['未知', '未知'])
-  assert.deepEqual(await zeroMetrics.locator('.algorithm-metrics dd').allTextContents(), ['0', '未知'])
-  assert.doesNotMatch(await p.locator('.monitor-page').innerText(), /CDC|License/)
-  await missingMetrics.getByText('暂无实例信息。', { exact: true }).waitFor()
-  pass('missing monitor metrics show unknown; zero is preserved; CDC is hidden and absent instances are not mislabelled undeployed')
+  assert.deepEqual(await p.locator('.status-overview dd').allTextContents(), ['3', '1', '2'])
+  assert.equal(await p.locator('.algorithm-metrics,.license-value').count(), 0)
+  assert.doesNotMatch(await p.locator('.monitor-page').innerText(), /授权状态|底库(?:规模|容量)|系统授权|CDC|License/)
+  await p.locator('[data-service="face"]').getByText('暂无实例信息。', { exact: true }).waitFor()
+  pass('monitoring shows health and instances only; missing metrics do not create authorization or capacity content')
   f.state.failMonitor = true
   await p.getByRole('button', { name: '立即刷新', exact: true }).click()
   await p.getByText('监控读取测试失败', { exact: true }).waitFor()
@@ -456,6 +476,37 @@ try {
   await p.getByText('阈值已保存', { exact: true }).waitFor()
   assert.deepEqual(f.calls.find(c => c.method === 'PUT' && c.path === '/abis/thresholds').body, { face: 85, finger: 70 })
   pass('threshold real-write confirmation, boolean-result reread and main success message preserved')
+  const thresholdInputs = p.locator('.threshold-field input')
+  await face.fill('59'); await face.blur()
+  const beforeReset = f.calls.length
+  await p.getByRole('button', { name: '重置', exact: true }).click()
+  await checkConfirmation(p, 'threshold reset confirmation')
+  assert.match(await p.locator('.confirmation-question').innerText(), /重置为 60/)
+  assert.deepEqual(await p.locator('.confirmation-details p').allTextContents(), ['人脸阈值：85 → 60', '指纹阈值：70 → 60'])
+  await cancel(p)
+  assert.equal(f.calls.length, beforeReset)
+  assert.equal(await face.inputValue(), '59')
+  pass('threshold reset cancellation preserves unsaved edits and performs no request')
+  f.state.failThresholdWrite = true
+  await p.getByRole('button', { name: '重置', exact: true }).click(); await confirm(p)
+  await p.getByText('阈值保存测试失败', { exact: true }).waitFor()
+  assert.equal(await face.inputValue(), '59')
+  assert.deepEqual(f.calls.filter(c => c.method === 'PUT' && c.path === '/abis/thresholds').at(-1).body, { face: 60, finger: 60 })
+  pass('threshold reset uses the save endpoint with 60/60; write failure preserves the form')
+  f.state.failThresholdWrite = false
+  f.state.failThresholdRead = true
+  await p.getByRole('button', { name: '重置', exact: true }).click(); await confirm(p)
+  await p.getByText(/写入已成功，但无法确认保存后的配置/).waitFor()
+  assert.equal(await face.inputValue(), '59')
+  pass('threshold reset reread failure explicitly reports that writing already succeeded')
+  f.state.failThresholdRead = false
+  const beforeResetSuccess = f.calls.length
+  await p.getByRole('button', { name: '重置', exact: true }).click(); await confirm(p)
+  await p.getByText('阈值已重置为 60', { exact: true }).waitFor()
+  assert.deepEqual(await thresholdInputs.evaluateAll(xs => xs.map(x => x.value)), ['60', '60'])
+  assert.deepEqual(f.calls.slice(beforeResetSuccess).map(c => [c.method, c.path]), [['PUT', '/abis/thresholds'], ['GET', '/abis/thresholds']])
+  await snapshot(p, 'threshold-reset-60')
+  pass('threshold reset writes and rereads 60/60 before updating the displayed values')
   for (const [path, prefix] of [['/logs', 'abis_api_logs'], ['/audits', 'abis_audit']]) {
     await go(p, path)
     await row(p, '真实列表拦截样本').waitFor()
@@ -592,7 +643,7 @@ try {
   await lp.getByText('fingerprint-1', { exact: false }).waitFor()
   await lp.getByRole('button', { name: '立即刷新', exact: true }).click(); await loaded(lp)
   await lp.getByText('fingerprint-1', { exact: false }).waitFor()
-  assert.deepEqual(await lp.locator('.status-overview dd').allTextContents(), ['3', '1', '1', '1'])
+  assert.deepEqual(await lp.locator('.status-overview dd').allTextContents(), ['3', '1', '2'])
   pass('real login stores the tab session; monitoring refresh keeps instances directly visible and preserves summary')
   await snapshot(lp, 'monitor-desktop')
   const settings = lp.getByRole('button', { name: '设置', exact: true })
@@ -628,6 +679,7 @@ try {
         await openProfile(lp)
         await snapshot(lp, 'personal-info-mobile')
         const mobileProfile = lp.getByRole('dialog', { name: '个人信息', exact: true })
+        assert.ok(await mobileProfile.getByText('新密码必须大于 6 位（至少 7 位）。', { exact: true }).isVisible())
         assert.equal(await mobileProfile.getByRole('button', { name: '保存新密码', exact: true }).isVisible(), true)
         const saveBounds = await mobileProfile.getByRole('button', { name: '保存新密码', exact: true }).boundingBox()
         assert.ok(saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 900, 'mobile profile footer stays within viewport')

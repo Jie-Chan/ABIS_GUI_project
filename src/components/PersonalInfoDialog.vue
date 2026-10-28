@@ -24,6 +24,7 @@ const rules = {
   oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 7, message: '新密码长度必须大于 6 位', trigger: ['blur', 'change'] },
     { validator: (_, value, done) => done(value && value === password.value.oldPassword ? new Error('新密码不能与原密码相同') : undefined), trigger: 'blur' },
   ],
   confirmPassword: [
@@ -94,7 +95,10 @@ async function savePassword() {
       <el-alert v-if="submitError" :title="submitError" type="error" :closable="false" class="profile-error" />
       <el-form ref="formRef" :model="password" :rules="rules" label-position="top" :disabled="saving || loading || account.identityPending" @submit.prevent="savePassword">
         <el-form-item label="原密码" prop="oldPassword"><el-input v-model="password.oldPassword" type="password" show-password placeholder="请输入原密码" autocomplete="current-password" /></el-form-item>
-        <el-form-item label="新密码" prop="newPassword"><el-input v-model="password.newPassword" type="password" show-password placeholder="请输入新密码" autocomplete="new-password" /></el-form-item>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input v-model="password.newPassword" type="password" show-password placeholder="请输入新密码" autocomplete="new-password" aria-describedby="new-password-requirement" />
+          <p id="new-password-requirement" class="password-requirement">新密码必须大于 6 位（至少 7 位）。</p>
+        </el-form-item>
         <el-form-item label="确认新密码" prop="confirmPassword"><el-input v-model="password.confirmPassword" type="password" show-password placeholder="请再次输入新密码" autocomplete="new-password" @keyup.enter="savePassword" /></el-form-item>
       </el-form>
       <p class="password-note">验证原密码后修改本人密码，修改成功后请重新登录。</p>
@@ -119,4 +123,5 @@ async function savePassword() {
 .password-section :deep(.el-form-item__label) { font-size: 13px; }
 .password-section :deep(.el-input__wrapper) { min-height: 40px; }
 .password-note { margin: 0; color: #718096; font-size: 12px; line-height: 1.7; }
+.password-requirement { margin: 5px 0 0; color: #718096; font-size: 12px; line-height: 1.7; }
 </style>

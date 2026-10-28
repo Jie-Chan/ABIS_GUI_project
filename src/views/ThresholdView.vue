@@ -9,6 +9,7 @@ import {
   THRESHOLD_MIN,
   THRESHOLD_MAX,
   THRESHOLD_KEYS,
+  DEFAULT_THRESHOLDS,
   buildLowerBoundMessage,
   allowsBelowLowerBound,
   lowerBoundAlertType,
@@ -18,6 +19,7 @@ const route = useRoute()
 const title = computed(() => route.meta.title || '')
 const loading = ref(false)
 const saving = ref(false)
+const confirming = ref(false)
 const error = ref('')
 
 const form = ref({ face: null, finger: null })
@@ -61,33 +63,45 @@ async function load() {
   }
 }
 
-async function handleSave() {
-  if (!validate()) return
+async function saveThresholds(values, reset = false) {
+  if (saving.value || loading.value || confirming.value) return
+  const payload = { ...values }
 
+  confirming.value = true
   try {
     await ElMessageBox.confirm(
-      buildConfirmationMessage('确认保存阈值配置？', [
-        `人脸阈值：${origin.value.face} → ${form.value.face}`,
-        `指纹阈值：${origin.value.finger} → ${form.value.finger}`,
+      buildConfirmationMessage(reset ? '确认将人脸和指纹阈值重置为 60？' : '确认保存阈值配置？', [
+        `人脸阈值：${origin.value.face} → ${payload.face}`,
+        `指纹阈值：${origin.value.finger} → ${payload.finger}`,
       ]),
       CONFIRM_TITLE,
       { type: 'warning' }
     )
   } catch {
     return
+  } finally {
+    confirming.value = false
   }
 
   saving.value = true
   try {
-    const result = await api.updateThresholds({ ...form.value })
+    const result = await api.updateThresholds(payload)
     form.value = { ...result }
     origin.value = { ...result }
-    ElMessage.success('阈值已保存')
+    ElMessage.success(reset ? '阈值已重置为 60' : '阈值已保存')
   } catch (e) {
     ElMessage.error(e.message || '保存失败')
   } finally {
     saving.value = false
   }
+}
+
+function handleSave() {
+  if (validate()) return saveThresholds(form.value)
+}
+
+function handleReset() {
+  return saveThresholds(DEFAULT_THRESHOLDS, true)
 }
 
 onMounted(load)
@@ -125,13 +139,14 @@ onMounted(load)
             :max="THRESHOLD_MAX"
             :step="1"
             step-strictly
+            :disabled="saving || loading || confirming"
           />
           <span class="bound">协议生效下限：{{ k.protocolLowerBound }}</span>
         </el-form-item>
 
         <el-form-item class="threshold-actions">
-          <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
-          <el-button @click="load">重置</el-button>
+          <el-button type="primary" :loading="saving" :disabled="loading || confirming" @click="handleSave">保存</el-button>
+          <el-button :disabled="saving || loading || confirming" @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
 
