@@ -12,6 +12,8 @@ import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
 import { THRESHOLD_KEYS } from '@/constants/threshold'
 import { LOG_FEATURE_LABEL, LOG_RESULT_LABEL } from '@/constants/log'
+import { optionalAccountFields } from '@/utils/account'
+import { ROLE, PERMISSION, hasPermission, canResetAccountPassword, canDeleteAccount, canChangeAccountRole, canToggleAccountEnabled } from '@/constants/roles'
 
 // —— 可变状态：模块加载时克隆一份，使增删改在会话内可见 ——
 let accounts = mockAccounts.map((a) => ({ ...a }))
@@ -25,6 +27,29 @@ const logs = buildLogRecords()
 const audits = buildAuditRecords()
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
+
+function currentAccount() {
+  const account = accounts.find(item => item.id === sessionAccountId && item.enabled)
+  if (!account) throw new Error('登录状态已失效，请重新登录')
+  return account
+}
+
+function managedAccount(id) {
+  const actor = currentAccount()
+  if (!hasPermission(actor.role, PERMISSION.ACCOUNT_MANAGE)) throw new Error('没有账户管理权限')
+  const target = accounts.find(item => item.id === id)
+  if (!target) throw new Error('账户不存在')
+  return { actor, target }
+}
+
+// 演示密码仅保留在模块内存，刷新后恢复种子数据。
+function setTemporaryPassword(account) {
+  const password = `Demo-${account.id}-${crypto.randomUUID().slice(0, 8)}`
+  const credential = credentials.find(item => item.accountId === account.id)
+  if (credential) credential.password = password
+  else credentials.push({ accountId: account.id, username: account.username, password })
+  return password
+}
 
 /** 通用分页 */
 function paginate(list, { page = 1, pageSize = 20 } = {}) {
@@ -62,7 +87,7 @@ export default {
 
   async getSession() {
     await delay(80)
-    return null
+    return { account: { ...currentAccount() } }
   },
 
   async changePassword({ oldPassword, newPassword } = {}) {
@@ -72,6 +97,8 @@ export default {
     if (typeof oldPassword !== 'string' || !oldPassword || typeof newPassword !== 'string' || !newPassword) {
       throw new Error('请填写原密码和新密码')
     }
+    if (newPassword.length < 7) throw new Error('新密码长度必须大于 6 位')
+    if (oldPassword === newPassword) throw new Error('新密码不能与原密码相同')
     const credential = credentials.find((item) => item.accountId === account.id)
     if (!credential || credential.password !== oldPassword) throw new Error('原密码不正确')
     credential.password = newPassword
@@ -91,37 +118,51 @@ export default {
 
   async createAccount(payload) {
     await delay()
+    if (!hasPermission(currentAccount().role, PERMISSION.ACCOUNT_MANAGE)) throw new Error('没有账户管理权限')
+    if (!payload.username?.trim() || !payload.displayName?.trim() || ![ROLE.ADMIN, ROLE.OPERATOR].includes(payload.role)) throw new Error('请填写用户名、姓名并选择角色')
+    if (accounts.some(item => item.username === payload.username)) throw new Error('用户名已存在')
     const account = {
       id: nextAccountId++,
       username: payload.username,
       displayName: payload.displayName,
       role: payload.role,
+      ...optionalAccountFields(payload),
       enabled: true,
       createdAt: formatDateTime(new Date()),
       lastLoginAt: '—',
     }
     accounts = [...accounts, account]
-    return { ...account }
+    return { ...account, initialPassword: setTemporaryPassword(account) }
   },
 
   async updateAccount(id, payload) {
     await delay()
+    const { actor, target } = managedAccount(id)
+    if ('role' in payload && (!canChangeAccountRole(actor.role, target.role, actor.id, id) || ![ROLE.ADMIN, ROLE.OPERATOR].includes(payload.role))) throw new Error('不能修改本人或管理员账户的角色')
+    if ('enabled' in payload && (typeof payload.enabled !== 'boolean' || !canToggleAccountEnabled(actor.role, target.role, actor.id, id, target.enabled))) throw new Error('不能禁用本人或管理员账户')
     // 与 resetPassword 一致：id 不存在必须报错。
     // 若静默返回 {}，页面会显示「保存成功」，而写得其实是一次不存在的更新，
     // 且返回的空对象会把该行渲染成空白 —— 只有真实后端会拒绝时才发现。
     if (!accounts.some((a) => a.id === id)) throw new Error('账户不存在')
-    accounts = accounts.map((a) => (a.id === id ? { ...a, ...payload } : a))
+    const changes = Object.fromEntries(['displayName', 'role', 'enabled', 'phone', 'email', 'remark'].filter(key => key in payload).map(key => [key, payload[key]]))
+    accounts = accounts.map((a) => (a.id === id ? { ...a, ...changes, updatedAt: formatDateTime(new Date()) } : a))
     return { ...accounts.find((a) => a.id === id) }
   },
 
   async deleteAccount(id) {
     await delay()
+    const { actor, target } = managedAccount(id)
+    if (!canDeleteAccount(actor.role, target.role, actor.id, id)) throw new Error('不能删除本人或管理员账户')
     accounts = accounts.filter((a) => a.id !== id)
+    const index = credentials.findIndex(item => item.accountId === id)
+    if (index >= 0) credentials.splice(index, 1)
   },
 
   async resetPassword(id) {
     await delay()
-    if (!accounts.some((a) => a.id === id)) throw new Error('账户不存在')
+    const { actor, target } = managedAccount(id)
+    if (!canResetAccountPassword(actor.role, target.role, actor.id, id)) throw new Error('不能重置本人或管理员账户的密码')
+    return { temporaryPassword: setTemporaryPassword(target) }
   },
 
   // ——— 阈值（需求 1.2）———

@@ -1,15 +1,16 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_LABEL } from '@/constants/roles'
 import { NAV_ITEMS, APP_NAME } from '@/constants/nav'
 import BrandMark from '@/components/BrandMark.vue'
 import UiIcon from '@/components/UiIcon.vue'
-import DataSourceBadge from '@/components/DataSourceBadge.vue'
 import ProfileDialog from '@/components/ProfileDialog.vue'
-import { PAGE_DESCRIPTIONS, isMockPreview, dataSourceNote } from '@/constants/presentation'
+import DataSourceBadge from '@/components/DataSourceBadge.vue'
+import { buildConfirmationMessage } from '@/utils/confirmation'
+import { PAGE_DESCRIPTIONS } from '@/constants/presentation'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,9 +20,11 @@ const title = APP_NAME
 const logoutLabel = '退出登录'
 const profileVisible = ref(false)
 
-/**
- * 先按原权限矩阵过滤，再做展示分组；不新增路由或权限点。
- */
+function handleAccountCommand(command) {
+  if (command === 'profile') profileVisible.value = true
+  else if (command === 'logout') handleLogout()
+}
+
 const navItems = computed(() => NAV_ITEMS.filter((item) => auth.hasPermission(item.permission)))
 const settingsPages = new Set(['threshold', 'accounts'])
 const primaryNavItems = computed(() => navItems.value.filter((item) => !settingsPages.has(item.name)))
@@ -29,15 +32,9 @@ const settingsNavItems = computed(() => navItems.value.filter((item) => settings
 const isSettingsPage = computed(() => settingsPages.has(route.name))
 
 const currentTitle = computed(() => route.meta.title || '')
-const roleLabel = computed(() => ROLE_LABEL[auth.role] || auth.role)
-const displayName = computed(() => auth.account?.username || auth.account?.displayName || '')
+const roleLabel = computed(() => ROLE_LABEL[auth.role] || '角色未识别')
+const displayName = computed(() => auth.account?.displayName || auth.account?.username || '')
 
-function handleAccountCommand(command) {
-  if (command === 'profile') profileVisible.value = true
-  if (command === 'logout') return handleLogout()
-}
-
-// 提示消息跟随实际导航高度，避免在窄屏换行后遮住菜单。
 const headerRef = ref(null)
 const messageOffset = ref(88)
 let headerObserver
@@ -52,18 +49,13 @@ onUnmounted(() => headerObserver?.disconnect())
 
 async function handleLogout() {
   try {
-    await ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(buildConfirmationMessage('确认退出登录？'), '提示', { type: 'warning' })
   } catch {
-    // 用户点「取消」时 ElMessageBox.confirm 会 **reject 一个 'cancel'**。
-    // 不接住它，本函数作为 @click 处理器被 Vue 的异步错误通道调用，
-    // 于是**每次取消都在控制台留下一条报错**（由 Vue 的 `errorHandler` 打印；
-    // ⚠ **不是**「unhandled rejection」——实测 0 次，且已用阳性对照证明监听器抓得到，
-    // 见 `check-task8.js` 的 4.2 / 4.3）。
-    // 功能没坏，但「取消」是常规操作，不该产生错误 —— 直接 return 即可。
     return
   }
-  await auth.logout()
-  router.push({ name: 'login' })
+  try { await auth.logout() }
+  catch (e) { ElMessage.warning(`本地已退出，服务端注销未确认：${e.message}`) }
+  finally { router.push({ name: 'login' }) }
 }
 </script>
 
@@ -95,8 +87,8 @@ async function handleLogout() {
       </nav>
       <div class="user">
         <DataSourceBadge />
-        <el-dropdown trigger="click" placement="bottom-end" popper-class="account-menu" @command="handleAccountCommand">
-          <button class="account-trigger" type="button" :aria-label="`账户菜单：${displayName}（${roleLabel}）`">
+        <el-dropdown trigger="click" popper-class="account-menu" @command="handleAccountCommand">
+          <button class="account-trigger" type="button" aria-label="账户菜单" :title="`${displayName}（${roleLabel}）`">
             <span class="avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
             <span class="user-name" :title="`${displayName}（${roleLabel}）`">{{ displayName }}<span class="user-role"> · {{ roleLabel }}</span></span>
             <UiIcon class="account-chevron" name="arrow" :size="12" />
@@ -117,9 +109,8 @@ async function handleLogout() {
         <h1>{{ currentTitle }}</h1>
         <p>{{ PAGE_DESCRIPTIONS[route.name] }}</p>
       </div>
-      <el-alert class="source-note" :title="dataSourceNote" :type="isMockPreview ? 'warning' : 'info'" show-icon :closable="false" />
+      <el-alert v-if="auth.account?.identityPending" title="当前账户角色未识别，仅允许查看数据。" type="info" :closable="false" style="margin-bottom: 12px" />
       <router-view />
-      <footer class="workspace-footer">{{ title }} <span>·</span> {{ isMockPreview ? 'Mock 界面预览' : 'HTTP 接口模式' }}</footer>
     </el-main>
   </el-container>
   <ProfileDialog v-model="profileVisible" />
@@ -140,7 +131,6 @@ async function handleLogout() {
 .settings-trigger:hover { background: #223854; color: #fff; }
 .settings-chevron { transform: rotate(90deg); }
 .user { display: flex; align-items: center; justify-self: end; gap: 12px; min-width: 0; max-width: 100%; font-size: 12px; white-space: nowrap; }
-.user :deep(.source-badge) { flex-shrink: 0; }
 .user :deep(.el-dropdown) { min-width: 0; }
 .account-trigger { display: flex; align-items: center; gap: 10px; min-height: 42px; max-width: min(300px, 100%); padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #d8e2ef; font-size: 12px; }
 .account-trigger:hover, .account-trigger[aria-expanded="true"] { background: #263c58; }
@@ -156,11 +146,6 @@ async function handleLogout() {
 .page-intro { margin-bottom: 18px; }
 .page-intro h1 { margin: 0 0 8px; font-size: 26px; font-weight: 650; letter-spacing: -.5px; line-height: 1.4; }
 .page-intro p { margin: 0; color: #718096; font-size: 13px; }
-.source-note { margin-bottom: 20px; border: 1px solid #f5e2bf; background: #fff8ec; }
-.source-note :deep(.el-alert__title) { font-size: 12px; }
-.source-note.el-alert--info { border-color: #dae4f6; background: #f0f5ff; }
-.workspace-footer { padding-top: 24px; color: #8b98ab; font-size: 11px; text-align: right; }
-.workspace-footer span { margin: 0 7px; }
 @media (max-width: 1250px) {
   .header { gap: 20px; padding: 0 24px; }
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 14px; padding-right: 14px; }
@@ -187,7 +172,6 @@ async function handleLogout() {
   .brand > span:last-child, .user-name { display: none; }
   .brand :deep(.brand-mark) { width: 24px; height: 24px; }
   .user { gap: 8px; }
-  .user :deep(.source-badge) { padding: 3px 7px; font-size: 10px; }
   .account-trigger { gap: 7px; padding: 4px; }
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 12px; padding-right: 12px; gap: 6px; font-size: 14px; }
   .primary-navigation :deep(.ui-icon) { display: none; }
@@ -196,4 +180,5 @@ async function handleLogout() {
   .page-intro h1 { font-size: 23px; }
   .page-intro p { font-size: 12px; }
 }
+.user :deep(.source-badge) { flex-shrink: 0; }
 </style>

@@ -70,17 +70,11 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .settings-menu .el-dropdown-menu__item { height: 42px; gap: 10px; margin: 2px 0; padding: 0 14px; border-radius: 5px; color: #435572; font-size: 13px; }
 .settings-menu .el-dropdown-menu__item.is-active { color: #3268e8; background: #edf3ff; font-weight: 600; }
 .settings-menu .el-dropdown-menu__item:hover { background: #f1f5fc; }
-.account-menu .el-dropdown-menu { min-width: 170px; padding: 6px; }
-.account-menu .el-dropdown-menu__item { display: flex; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 5px; color: #435572; }
-.account-menu .el-dropdown-menu__item:not(.is-disabled):focus { color: #3268e8; background: #edf3ff; }
-.account-menu .el-dropdown-menu__item--divided { margin-top: 6px; }
 .el-dialog { max-width: calc(100vw - 32px); padding: 24px; border-radius: 10px; }
-.el-dialog.profile-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .el-dialog__header { margin-bottom: 12px; }
 .el-dialog__title, .el-message-box__title { font-weight: 600; }
 .el-dialog__body .el-descriptions__label { width: 120px; }
 .el-dialog__body .el-descriptions__content { overflow-wrap: anywhere; }
-/* Element Plus 默认 width:100%；设置宽度才能同时保留桌面上限与手机边距。 */
 .el-message-box { width: var(--el-messagebox-width, 420px); max-width: calc(100vw - 32px); border-radius: 10px; padding: 24px; }
 .el-message-box__message { line-height: 1.7; overflow-wrap: anywhere; }
 .confirmation-question { margin: 0; color: var(--el-text-color-primary); font-size: 14px; font-weight: 600; }
@@ -100,4 +94,25 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+.account-menu .el-dropdown-menu { min-width: 170px; padding: 6px; border-radius: 8px; }
+.account-menu .el-dropdown-menu__item { display: flex; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 5px; color: #435572; font-size: 13px; }
+.account-menu .el-dropdown-menu__item:not(.is-disabled):focus { color: #3268e8; background: #edf3ff; }
+.account-menu .el-dropdown-menu__item--divided { margin-top: 6px; }
+
+/* 日志/审计：只保留页面主标题，筛选与结果工具栏各司其职。 */
+.abis-shell .records-page .el-card__body { padding: 20px 24px; }
+.abis-shell .records-page .filters { gap: 0 12px; margin-bottom: 12px; padding-bottom: 0; }
+.abis-shell .records-page .filters .el-form-item { margin-bottom: 12px; }
+.results-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+@media (min-width: 1200px) {
+  .abis-shell .records-page .logs-filters { display: grid; grid-template-columns: minmax(260px, 1.6fr) minmax(180px, 1.2fr) 100px 100px 190px auto; }
+  .abis-shell .records-page .logs-filters .el-form-item__content > .el-select,
+  .abis-shell .records-page .logs-filters .el-date-editor { width: 100% !important; min-width: 0; }
+  .abis-shell .records-page .logs-filters .el-input-number { width: 80px !important; }
+}
+@media (max-width: 767px) {
+  .abis-shell .records-page .el-card__body { padding: 16px; }
+  .results-toolbar { flex-wrap: wrap; }
 }

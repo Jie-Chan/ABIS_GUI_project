@@ -19,6 +19,10 @@
  * @property {boolean} enabled
  * @property {string} createdAt
  * @property {string} lastLoginAt
+ * @property {string} [updatedAt]
+ * @property {string} [phone]
+ * @property {string} [email]
+ * @property {string} [remark]
  */
 
 /**
@@ -37,7 +41,7 @@
  * @property {'normal'|'abnormal'|'unreachable'|'not_deployed'} status
  * @property {Array<{id: string, status: string}>} instances
  * @property {boolean} optional
- * @property {MonitorMetrics} [metrics]  仅算法服务有
+ * @property {MonitorMetrics} [metrics]  可选原始指标，当前监控界面不展示授权或底库信息
  *
  * ⚠ metrics **不保证存在**：非算法服务对象上它可能是缺失的键，
  *   也可能是存在但为 undefined 的键（取决于适配器是否经过序列化边界）。
@@ -116,10 +120,10 @@
  * @property {() => Promise<{account: Account}|null>} getSession
  * @property {(payload: {oldPassword: string, newPassword: string}) => Promise<void>} changePassword 本人改密；身份来自当前会话，不接受目标账户 ID
  * @property {(params?: PageParams & {keyword?: string}) => Promise<{total: number, items: Account[]}>} listAccounts
- * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator'}) => Promise<Account>} createAccount
+ * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator', phone?: string, email?: string, remark?: string}) => Promise<Account & {initialPassword?: string}>} createAccount
  * @property {(id: number, payload: Partial<Account>) => Promise<Account>} updateAccount
  * @property {(id: number) => Promise<void>} deleteAccount
- * @property {(id: number) => Promise<void>} resetPassword
+ * @property {(id: number) => Promise<{temporaryPassword?: string}|void>} resetPassword
  * @property {() => Promise<{face: number, finger: number}>} getThresholds
  * @property {(payload: {face?: number, finger?: number}) => Promise<{face: number, finger: number}>} updateThresholds
  * @property {() => Promise<{items: MonitorItem[], fetchedAt: string}>} getHealth

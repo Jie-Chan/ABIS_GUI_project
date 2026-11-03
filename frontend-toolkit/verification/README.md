@@ -1,6 +1,6 @@
 # ABIS 浏览器回归检查
 
-这是与工程依赖隔离的 Node.js Playwright 检查包。原 webapp-testing 技能使用 Python，本目录使用 Node.js Playwright。`npm test` 顺序运行界面回归检查和个人账户专项检查。
+这是与工程依赖隔离的 Node.js Playwright 检查包。原 webapp-testing 技能使用 Python，本目录使用 Node.js Playwright。`npm test` 顺序运行界面回归、个人账户、监控卡片及最新联调同步专项检查。
 
 先在工程根目录启动 Mock，保持服务运行：
 
@@ -33,4 +33,10 @@ ABIS_PREVIEW_URL=http://127.0.0.1:5186 ABIS_QA_OUTPUT_DIR=./qa-output npm test
 
 `review-profile.mjs` 覆盖新版登录背景及居中、账户菜单键盘操作、个人信息只读展示、密码必填和一致性校验、原密码错误、关闭后清空、重复提交、改密后重新登录及运维员权限。该脚本会在独立浏览器会话中修改 Mock 密码，结束后不影响其他预览会话；结果默认保存在 `qa-output/profile/`。只重跑该专项可使用 `node review-profile.mjs`。
 
+`review-monitor.mjs` 覆盖六张服务卡片、中文展示、实例直接可见、异常筛选及统计不变、刷新保留筛选、授权/底库指标不展示、未部署计入异常、零值与缺失指标不影响展示、读取失败及旧数据提示、长文本和窄屏布局。脚本通过测试浏览器内替换 Mock 方法构造边界状态，不改源码或真实服务。结果默认保存在 `qa-output/monitor/`；单独运行使用 `node review-monitor.mjs`。
+
 Playwright 固定为本次使用的 1.64.1，package-lock.json 已提供；脚本不依赖原机器的 /tmp、Windows 字体路径或 PowerShell。
+
+## 2026-11-03 联调同步
+
+检查已按最新联调交互更新：监控正常/异常二态，运维员可配置阈值，账户更多菜单及保护，个人资料/改密页签和二次确认，恢复默认值只填表。`review-sync.mjs` 额外覆盖查询回到第一页、请求乱序与失败清理、时间快捷项、阈值离页保护和读取/回读失败锁定，以及 1366/1920/390px 截图。测试只访问当前 Mock，不连接联调后端。

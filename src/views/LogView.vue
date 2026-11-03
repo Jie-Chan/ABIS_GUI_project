@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { TIME_RANGE_SHORTCUTS } from '@/constants/timeRanges'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import {
@@ -18,19 +18,14 @@ import {
   LOG_RESULT_TAG_TYPE,
 } from '@/constants/log'
 
-// ⚠ 页面 / 卡片标题**从 `route.meta.title` 取，不要在本文件里再写一遍字面量**。
-//   Global Constraints 第 2 条禁止同一句文案在多个文件里重复；
-//   导航标签、路由 `meta.title`、页头本来就走同一处来源
-//   （Task 11 会把它们进一步收成 `src/constants/nav.js`）。
-const route = useRoute()
-const title = computed(() => route.meta.title || '')
 const loading = ref(false)
 const exporting = ref(false)
 const error = ref('')
 const rows = ref([])
 const total = ref(0)
+let requestSequence = 0
+onBeforeUnmount(() => { requestSequence++ })
 
-/** 五个过滤维度 —— 需求 1.4：时间范围、接口、生物模态、结果状态、耗时区间 */
 const query = ref({
   page: 1,
   pageSize: 20,
@@ -68,21 +63,42 @@ function resetQuery() {
   load()
 }
 
+function search() {
+  query.value.page = 1
+  return load()
+}
+
+function changePage(page) {
+  if (page === query.value.page) return
+  query.value.page = page
+  return load()
+}
+
+function changePageSize(size) {
+  query.value.pageSize = size
+  return search()
+}
+
 async function load() {
+  const requestId = ++requestSequence
   syncTimeRange()
   loading.value = true
   error.value = ''
   try {
-    const result = await api.listLogs(query.value)
+    const result = await api.listLogs({ ...query.value })
+    if (requestId !== requestSequence) return
     rows.value = result.items
     total.value = result.total
   } catch (e) {
-    // 查询失败必须与「查无记录」区分开：不接住异常，表格会停在旧数据上、
-    // 错误会被交给 Vue 的 errorHandler 打印（⚠ **不是**「未处理 rejection」，见 Task 8 同处说明），
-    // 用户会把「读不到」误读成「没有日志」。
+    if (requestId !== requestSequence) return
+    rows.value = []
+    query.value.page = 1
+    total.value = 0
+    detailVisible.value = false
+    detail.value = null
     error.value = e.message || '查询调用日志失败'
   } finally {
-    loading.value = false
+    if (requestId === requestSequence) loading.value = false
   }
 }
 
@@ -109,12 +125,8 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="records-page">
     <el-card>
-      <template #header>
-        <div class="record-heading"><span>{{ title }}</span><span class="record-count">共 {{ total }} 条调用记录</span></div>
-      </template>
-
       <el-alert
         v-if="error"
         :title="error"
@@ -123,11 +135,12 @@ onMounted(load)
         style="margin-bottom: 12px"
       />
 
-      <el-form :inline="true" class="filters">
+      <el-form :inline="true" class="filters logs-filters">
         <el-form-item label="时间范围">
           <el-date-picker
             v-model="timeRange"
             type="datetimerange"
+            :shortcuts="TIME_RANGE_SHORTCUTS"
             value-format="YYYY-MM-DD HH:mm:ss"
             start-placeholder="开始时间"
             end-placeholder="结束时间"
@@ -154,13 +167,17 @@ onMounted(load)
           <el-input-number v-model="query.maxCost" :min="0" :controls="false" placeholder="最大" style="width: 100px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="load">查询</el-button>
+          <el-button type="primary" @click="search">查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
-          <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
         </el-form-item>
       </el-form>
 
-      <el-table :data="rows" v-loading="loading" border style="width: 100%">
+      <div class="results-toolbar">
+        <span class="record-count" aria-live="polite">共 {{ total }} 条调用记录</span>
+        <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
+      </div>
+
+      <el-table :data="rows" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border style="width: 100%">
         <el-table-column prop="calledAt" label="调用时间" width="180" />
         <el-table-column prop="caller" label="调用方标识" width="170" />
         <el-table-column prop="apiLabel" label="接口" min-width="240" />
@@ -183,19 +200,18 @@ onMounted(load)
       </el-table>
 
       <el-pagination
-        v-model:current-page="query.page"
-        v-model:page-size="query.pageSize"
+        :current-page="query.page"
+        :page-size="query.pageSize"
         :total="total"
         :page-sizes="[20, 50, 100]"
         layout="total, sizes, prev, pager, next"
         style="margin-top: 12px; justify-content: flex-end"
-        @current-change="load"
-        @size-change="load"
+        @update:current-page="changePage"
+        @update:page-size="changePageSize"
       />
 
       <p class="note">
-        仅记录五个业务接口的调用元数据。健康检查不纳入调用日志。
-        调用记录不含请求报文中的生物图像数据。保留期默认 1 个月，到期由定时任务清理。
+        仅展示接口调用元数据，不含生物图像。
       </p>
     </el-card>
 

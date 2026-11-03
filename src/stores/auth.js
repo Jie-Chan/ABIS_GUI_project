@@ -33,11 +33,21 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await api.logout()
     } finally {
-      account.value = null
-      token.value = ''
-      localStorage.removeItem(TOKEN_KEY)
+      clearSession()
     }
   }
 
-  return { account, token, isLoggedIn, role, login, logout, hasPermission }
+  function clearSession() {
+    account.value = null
+    token.value = ''
+    localStorage.removeItem(TOKEN_KEY)
+  }
+
+  async function refreshAccount() {
+    const session = await api.getSession()
+    if (!session?.account) throw new Error('登录状态已失效，请重新登录')
+    account.value = session.account
+  }
+
+  return { account, token, isLoggedIn, role, login, logout, hasPermission, clearSession, refreshAccount }
 })

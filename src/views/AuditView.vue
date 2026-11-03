@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { TIME_RANGE_SHORTCUTS } from '@/constants/timeRanges'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import {
@@ -11,17 +11,13 @@ import {
 } from '@/utils/csv'
 import { AUDIT_ACTIONS } from '@/constants/audit'
 
-// ⚠ 页面 / 卡片标题**从 `route.meta.title` 取，不要在本文件里再写一遍字面量**。
-//   Global Constraints 第 2 条禁止同一句文案在多个文件里重复；
-//   导航标签、路由 `meta.title`、页头本来就走同一处来源
-//   （Task 11 会把它们进一步收成 `src/constants/nav.js`）。
-const route = useRoute()
-const title = computed(() => route.meta.title || '')
 const loading = ref(false)
 const exporting = ref(false)
 const error = ref('')
 const rows = ref([])
 const total = ref(0)
+let requestSequence = 0
+onBeforeUnmount(() => { requestSequence++ })
 
 const query = ref({ page: 1, pageSize: 20, operator: '', action: '', result: '' })
 const timeRange = ref([])
@@ -42,19 +38,42 @@ function resetQuery() {
   load()
 }
 
+function search() {
+  query.value.page = 1
+  return load()
+}
+
+function changePage(page) {
+  if (page === query.value.page) return
+  query.value.page = page
+  return load()
+}
+
+function changePageSize(size) {
+  query.value.pageSize = size
+  return search()
+}
+
 async function load() {
+  const requestId = ++requestSequence
   syncTimeRange()
   loading.value = true
   error.value = ''
   try {
-    const result = await api.listAudits(query.value)
+    const result = await api.listAudits({ ...query.value })
+    if (requestId !== requestSequence) return
     rows.value = result.items
     total.value = result.total
   } catch (e) {
-    // 同 Task 9：查询失败必须与「查无记录」区分开。
+    if (requestId !== requestSequence) return
+    rows.value = []
+    query.value.page = 1
+    total.value = 0
+    detailVisible.value = false
+    detail.value = null
     error.value = e.message || '查询审计记录失败'
   } finally {
-    loading.value = false
+    if (requestId === requestSequence) loading.value = false
   }
 }
 
@@ -81,12 +100,8 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="records-page">
     <el-card>
-      <template #header>
-        <div class="record-heading"><span>{{ title }}</span><span class="record-count">共 {{ total }} 条审计记录</span></div>
-      </template>
-
       <el-alert
         v-if="error"
         :title="error"
@@ -95,11 +110,12 @@ onMounted(load)
         style="margin-bottom: 12px"
       />
 
-      <el-form :inline="true" class="filters">
+      <el-form :inline="true" class="filters audits-filters">
         <el-form-item label="时间范围">
           <el-date-picker
             v-model="timeRange"
             type="datetimerange"
+            :shortcuts="TIME_RANGE_SHORTCUTS"
             value-format="YYYY-MM-DD HH:mm:ss"
             start-placeholder="开始时间"
             end-placeholder="结束时间"
@@ -120,13 +136,17 @@ onMounted(load)
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="load">查询</el-button>
+          <el-button type="primary" @click="search">查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
-          <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
         </el-form-item>
       </el-form>
 
-      <el-table :data="rows" v-loading="loading" border style="width: 100%">
+      <div class="results-toolbar">
+        <span class="record-count" aria-live="polite">共 {{ total }} 条审计记录</span>
+        <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
+      </div>
+
+      <el-table :data="rows" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border style="width: 100%">
         <el-table-column prop="operatedAt" label="时间" width="180" />
         <el-table-column prop="operator" label="操作人" width="130" />
         <el-table-column prop="roleLabel" label="角色" width="100" />
@@ -146,19 +166,18 @@ onMounted(load)
       </el-table>
 
       <el-pagination
-        v-model:current-page="query.page"
-        v-model:page-size="query.pageSize"
+        :current-page="query.page"
+        :page-size="query.pageSize"
         :total="total"
         :page-sizes="[20, 50, 100]"
         layout="total, sizes, prev, pager, next"
         style="margin-top: 12px; justify-content: flex-end"
-        @current-change="load"
-        @size-change="load"
+        @update:current-page="changePage"
+        @update:page-size="changePageSize"
       />
 
       <p class="note">
-        审计记录只写不改不删，本页仅提供查询与导出，不提供修改或删除入口。
-        查询与导出行为本身不计入审计范围。保留期默认 1 年、配置上限 2 年。
+        审计记录仅供查询和导出。
       </p>
     </el-card>
 
