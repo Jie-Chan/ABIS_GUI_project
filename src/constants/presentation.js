@@ -8,8 +8,9 @@ export const dataSourceNote = isMockPreview
 
 export const PAGE_DESCRIPTIONS = {
   monitor: '查看各层服务状态与实例运行信息',
+  applicants: '查询当前已入库人员，查看入库信息与相关调用记录',
   threshold: '管理人脸与指纹识别的默认匹配阈值',
   accounts: '管理控制台账户、角色与访问状态',
-  logs: '检索业务接口调用记录与处理结果',
+  logs: '按申请人 ID、业务请求 ID 或调用条件追查接口记录',
   audits: '追溯控制台操作与配置变更记录',
 }

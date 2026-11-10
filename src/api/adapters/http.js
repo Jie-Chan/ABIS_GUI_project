@@ -45,6 +45,8 @@ export default {
   changePassword: notReady('changePassword'),
 
   listAccounts: notReady('listAccounts'),
+  listApplicants: notReady('listApplicants'),
+  getApplicant: notReady('getApplicant'),
   createAccount: notReady('createAccount'),
   updateAccount: notReady('updateAccount'),
   deleteAccount: notReady('deleteAccount'),

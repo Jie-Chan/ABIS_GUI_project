@@ -107,7 +107,15 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .abis-shell .records-page .filters .el-form-item { margin-bottom: 12px; }
 .results-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 @media (min-width: 1200px) {
-  .abis-shell .records-page .logs-filters { display: grid; grid-template-columns: minmax(260px, 1.6fr) minmax(180px, 1.2fr) 100px 100px 190px auto; }
+  .abis-shell .records-page .logs-filters { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-areas: 'user user user request request request time time time time actions actions' 'api api api api feature feature result result cost cost cost cost'; }
+  .logs-filters .log-user-filter { grid-area: user; width: auto; }
+  .logs-filters .log-request-filter { grid-area: request; width: auto; }
+  .logs-filters .log-time-filter { grid-area: time; }
+  .logs-filters .log-api-filter { grid-area: api; }
+  .logs-filters .log-feature-filter { grid-area: feature; }
+  .logs-filters .log-result-filter { grid-area: result; }
+  .logs-filters .log-cost-filter { grid-area: cost; }
+  .logs-filters .log-actions { grid-area: actions; }
   .abis-shell .records-page .logs-filters .el-form-item__content > .el-select,
   .abis-shell .records-page .logs-filters .el-date-editor { width: 100% !important; min-width: 0; }
   .abis-shell .records-page .logs-filters .el-input-number { width: 80px !important; }

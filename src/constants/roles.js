@@ -4,6 +4,7 @@ export const ROLE_LABEL = { [ROLE.ADMIN]: '管理员', [ROLE.OPERATOR]: '运维�
 
 export const PERMISSION = {
   MONITOR_VIEW: 'monitor:view',
+  APPLICANT_VIEW: 'applicant:view',
   LOG_VIEW: 'log:view',
   AUDIT_VIEW: 'audit:view',
   THRESHOLD_EDIT: 'threshold:edit',
@@ -15,7 +16,7 @@ export const PERMISSION = {
 
 export const ROLE_PERMISSIONS = {
   [ROLE.ADMIN]: Object.values(PERMISSION),
-  [ROLE.OPERATOR]: [PERMISSION.MONITOR_VIEW, PERMISSION.LOG_VIEW, PERMISSION.AUDIT_VIEW, PERMISSION.THRESHOLD_EDIT],
+  [ROLE.OPERATOR]: [PERMISSION.MONITOR_VIEW, PERMISSION.APPLICANT_VIEW, PERMISSION.LOG_VIEW, PERMISSION.AUDIT_VIEW, PERMISSION.THRESHOLD_EDIT],
 }
 
 export function hasPermission(role, permission) {

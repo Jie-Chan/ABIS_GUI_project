@@ -8,6 +8,7 @@ import { mockAccounts, mockCredentials } from '@/mock/accounts'
 import { mockThresholds } from '@/mock/thresholds'
 import { buildMonitorSnapshot } from '@/mock/monitor'
 import { buildLogRecords } from '@/mock/logs'
+import { buildApplicants } from '@/mock/applicants'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
 import { THRESHOLD_KEYS } from '@/constants/threshold'
@@ -24,6 +25,7 @@ const credentials = mockCredentials.map((credential) => ({ ...credential }))
 let sessionAccountId = null
 
 const logs = buildLogRecords()
+const applicants = buildApplicants()
 const audits = buildAuditRecords()
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
@@ -196,6 +198,30 @@ export default {
 
   // ——— 日志与审计查询（需求 1.4 / 2.2）———
 
+  async listApplicants({ page = 1, pageSize = 20, userId = '', modality = '', startTime = '', endTime = '' } = {}) {
+    await delay()
+    if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有申请人查看权限')
+    const id = userId.trim()
+    const filtered = applicants.filter(person => {
+      if (id && person.userId !== id) return false
+      if (modality === 'face' && !person.faceCount) return false
+      if (modality === 'finger' && !person.fingerCount) return false
+      if (modality === 'both' && (!person.faceCount || !person.fingerCount)) return false
+      if (startTime && person.enrolledAt < startTime) return false
+      if (endTime && person.enrolledAt > endTime) return false
+      return true
+    })
+    return paginate(filtered.map(({ records, ...person }) => ({ ...person })), { page, pageSize })
+  },
+
+  async getApplicant(userId) {
+    await delay()
+    if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有申请人查看权限')
+    const person = applicants.find(item => item.userId === userId)
+    if (!person) throw new Error('申请人不存在或已不在库中')
+    return { ...person, records: person.records.map(record => ({ ...record })) }
+  },
+
   async listLogs(params = {}) {
     await delay()
     return paginate(filterLogs(logs, params), params)
@@ -212,7 +238,8 @@ export default {
     await delay()
     const rows = filterLogs(logs, params)
     return toCsvBlob(rows, [
-      ['calledAt', '调用时间'], ['caller', '调用方标识'], ['apiLabel', '接口'],
+      ['calledAt', '调用时间'], ['userId', '申请人 ID'], ['requestId', '业务请求 ID'],
+      ['caller', '调用方标识'], ['apiLabel', '接口'],
       // feature / result 在记录里存的是枚举 key（'face' / 'success'），
       // 直接落表会在中文表头下写出英文枚举值。用常量里的 key→label 快查表转中文，
       // 与 exportAudits 直接用 roleLabel 的做法保持一致。
@@ -236,14 +263,18 @@ export default {
 // ——— 内部工具 ———
 
 /**
- * 日志过滤维度（需求 1.4 五个：时间范围、接口、生物模态、结果状态、耗时区间）
+ * 申请人/业务请求 ID 精确匹配，与时间、接口、模态、结果、耗时组合过滤。
  *
  * ⚠ startTime / endTime 与 r.calledAt 之间是**字符串比较**，三者同为
  *   'YYYY-MM-DD HH:mm:ss' 才成立。传 Date 对象或 'YYYY-MM-DD' 不报错，
  *   只会静默过滤掉全部记录 —— 调用方须先用 formatDateTime 归一化。
  */
-function filterLogs(list, { startTime, endTime, api, feature, result, minCost, maxCost } = {}) {
+function filterLogs(list, { startTime, endTime, userId = '', requestId = '', api, feature, result, minCost, maxCost } = {}) {
+  const applicant = userId.trim()
+  const request = requestId.trim()
   return list.filter((r) => {
+    if (applicant && r.userId !== applicant) return false
+    if (request && r.requestId !== request) return false
     if (startTime && r.calledAt < startTime) return false
     if (endTime && r.calledAt > endTime) return false
     if (api && r.api !== api) return false

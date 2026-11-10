@@ -1,6 +1,6 @@
 # ABIS 浏览器回归检查
 
-这是与工程依赖隔离的 Node.js Playwright 检查包。原 webapp-testing 技能使用 Python，本目录使用 Node.js Playwright。`npm test` 顺序运行界面回归、个人账户、监控卡片及最新联调同步专项检查。
+这是与工程依赖隔离的 Node.js Playwright 检查包。原 webapp-testing 技能使用 Python，本目录使用 Node.js Playwright。`npm test` 顺序运行界面回归、个人账户、监控卡片、最新联调同步、日志 ID 及申请人列表专项检查。
 
 先在工程根目录启动 Mock，保持服务运行：
 
@@ -40,3 +40,7 @@ Playwright 固定为本次使用的 1.64.1，package-lock.json 已提供；脚�
 ## 2026-11-03 联调同步
 
 检查已按最新联调交互更新：监控正常/异常二态，运维员可配置阈值，账户更多菜单及保护，个人资料/改密页签和二次确认，恢复默认值只填表。`review-sync.mjs` 额外覆盖查询回到第一页、请求乱序与失败清理、时间快捷项、阈值离页保护和读取/回读失败锁定，以及 1366/1920/390px 截图。测试只访问当前 Mock，不连接联调后端。
+
+`review-log-ids.mjs` 验证申请人 `userId` 和业务请求 `requestId` 的独立/组合精确查询、前导零与空白处理、回车查询、分页保留、CSV 导出所有匹配结果、缺失 ID 兼容展示、重置与手机端列遮挡。单独运行 `node review-log-ids.mjs`，报告和截图位于 `qa-output/log-ids/`。
+
+`review-applicants.mjs` 验证申请人一级导航、两角色查看权限、独立在库人员、查询/分页、详情与日志跳转、失败和请求乱序，以及 320–1920px 列表/详情布局。单独运行 `node review-applicants.mjs`；报告和截图位于 `qa-output/applicants/`。

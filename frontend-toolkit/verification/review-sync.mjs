@@ -40,7 +40,7 @@ try {
   for (const [path, method] of [['/logs', 'listLogs'], ['/audits', 'listAudits']]) {
     await go(path)
     assert.equal(await page.locator('.records-page .el-card__header').count(), 0)
-    assert.ok((await page.locator('.el-table').boundingBox()).y <= 350)
+    assert.ok((await page.locator('.el-table').boundingBox()).y <= (path === '/logs' ? 430 : 350))
     await page.locator('.el-date-editor input').first().click()
     await button('最近一小时').click()
     await page.evaluate(async method => {

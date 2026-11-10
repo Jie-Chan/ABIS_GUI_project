@@ -106,8 +106,11 @@ async function handleLogout() {
     <el-main class="workspace-main">
       <div v-if="isSettingsPage" class="breadcrumb" aria-label="当前位置"><span>设置</span><b>/</b><strong>{{ currentTitle }}</strong></div>
       <div class="page-intro">
-        <h1>{{ currentTitle }}</h1>
-        <p>{{ PAGE_DESCRIPTIONS[route.name] }}</p>
+        <span class="page-icon"><UiIcon :name="route.name" :size="25" /></span>
+        <div>
+          <h1>{{ currentTitle }}</h1>
+          <p>{{ PAGE_DESCRIPTIONS[route.name] }}</p>
+        </div>
       </div>
       <el-alert v-if="auth.account?.identityPending" title="当前账户角色未识别，仅允许查看数据。" type="info" :closable="false" style="margin-bottom: 12px" />
       <router-view />
@@ -119,7 +122,7 @@ async function handleLogout() {
 
 <style scoped>
 .console-layout { min-height: 100vh; flex-direction: column; }
-.header { position: sticky; top: 0; z-index: 100; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 32px; height: 72px; padding: 0 40px; background: var(--abis-navy); color: #d8e2ef; }
+.header { position: sticky; top: 0; z-index: 100; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 32px; height: 72px; padding: 0 40px; background: var(--abis-navy); color: #d8e2ef; box-shadow: 0 1px 0 #ffffff14, 0 3px 12px #102c4914; }
 .brand { display: flex; flex-shrink: 0; align-items: center; gap: 11px; white-space: nowrap; }
 .brand strong { color: #fff; font-size: 25px; letter-spacing: .5px; }
 .brand > span:last-child { font-size: 12px; }
@@ -138,15 +141,17 @@ async function handleLogout() {
 .avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; }
 .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #acbdd4; }
-.workspace-main { width: 100%; min-width: 0; padding: 28px 48px; overflow: visible; }
+.workspace-main { width: 100%; min-width: 0; padding: 32px 48px 48px; overflow: visible; }
 .breadcrumb { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 12px; }
 .breadcrumb > span { color: #7c8ba1; }
 .breadcrumb b { color: #b6c1d0; font-weight: 400; }
 .breadcrumb strong { font-weight: 500; }
-.page-intro { margin-bottom: 18px; }
-.page-intro h1 { margin: 0 0 8px; font-size: 26px; font-weight: 650; letter-spacing: -.5px; line-height: 1.4; }
-.page-intro p { margin: 0; color: #718096; font-size: 13px; }
-@media (max-width: 1250px) {
+.page-intro { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.page-intro > div { min-width: 0; }
+.page-icon { display: grid; place-items: center; width: 50px; height: 50px; flex-shrink: 0; border: 1px solid #d5e2f4; border-radius: 12px; background: #e9f0fb; color: var(--el-color-primary); }
+.page-intro h1 { margin: 0 0 5px; font-size: 25px; font-weight: 650; letter-spacing: -.5px; line-height: 1.4; }
+.page-intro p { margin: 0; color: var(--abis-muted); font-size: 13px; line-height: 1.7; }
+@media (max-width: 1400px) {
   .header { gap: 20px; padding: 0 24px; }
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 14px; padding-right: 14px; }
   .primary-navigation :deep(.ui-icon) { display: none; }
@@ -155,7 +160,7 @@ async function handleLogout() {
   .user-role { display: none; }
   .workspace-main { padding: 28px; }
 }
-@media (max-width: 1000px) {
+@media (max-width: 1200px) {
   .header { display: flex; height: auto; min-height: 72px; flex-wrap: wrap; gap: 0 20px; padding: 16px 24px 0; }
   .user { margin-left: auto; }
   .primary-navigation { order: 3; flex-basis: 100%; justify-content: safe center; margin-top: 12px; overflow-x: auto; }
@@ -179,6 +184,8 @@ async function handleLogout() {
   .workspace-main { padding: 22px 16px; }
   .page-intro h1 { font-size: 23px; }
   .page-intro p { font-size: 12px; }
+  .page-intro { gap: 12px; margin-bottom: 20px; }
+  .page-icon { width: 42px; height: 42px; border-radius: 10px; }
 }
 .user :deep(.source-badge) { flex-shrink: 0; }
 </style>

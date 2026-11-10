@@ -60,7 +60,7 @@ const checkHeader=async label=>{
  })
  assert.equal(layout.font,layout.width<=600?'14px':'15px')
  if(!layout.scrolls)assert.ok(Math.abs(layout.center-layout.width/2)<1,`${label}: navigation is not centered: ${JSON.stringify(layout)}`)
- if(layout.width>1000){
+ if(layout.width>1200){
    assert.ok(layout.nav.left>=layout.brand.right+8,`${label}: navigation overlaps brand`)
    assert.ok(layout.nav.right<=layout.user.left-8,`${label}: navigation overlaps account controls`)
  }else{
@@ -98,10 +98,10 @@ try{
  pass('wrong password remains rejected')
  await login('admin','admin123')
  assert.deepEqual(await page.locator('.status-overview dd').allTextContents(),['6','3','3'])
- assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),3)
+ assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),4)
  assert.equal(await settings.count(),1)
  assert.equal(await page.locator('.aside').count(),0)
- pass('admin sees three primary links plus Settings; monitoring counts use normal/abnormal totals')
+ pass('admin sees four primary links plus Settings; monitoring counts use normal/abnormal totals')
  await checkHeader('desktop at 1600px')
  for(const width of [1251,1250,1001,1000]){
    await page.setViewportSize({width,height:1000})
@@ -223,7 +223,7 @@ try{
  pass('audit navigation, detail and export')
  for(const width of [1280,1024,768,390,320]){
    await page.setViewportSize({width,height:900})
-   for(const [name,path] of [['服务状态监控','monitor'],['匹配阈值配置','threshold'],['账户管理','accounts'],['日志查询','logs'],['审计查询','audits']]){
+   for(const [name,path] of [['服务状态监控','monitor'],['申请人列表','applicants'],['匹配阈值配置','threshold'],['账户管理','accounts'],['日志查询','logs'],['审计查询','audits']]){
      await nav(name,path)
      if(path==='monitor')await checkHeader(`header at ${width}px`)
      await noOverflow(`${path} at ${width}px`)
@@ -254,7 +254,7 @@ try{
  await page.setViewportSize({width:390,height:844});await snap('mobile-login')
  await login('ops.zhang','ops123')
  assert.equal(await settings.count(),1)
- assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),3)
+ assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),4)
  await nav('匹配阈值配置','threshold')
  await page.evaluate(async()=>{await document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/accounts')})
  await page.waitForURL('**/monitor')
