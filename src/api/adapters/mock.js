@@ -11,6 +11,8 @@ import { buildLogRecords } from '@/mock/logs'
 import { buildApplicants } from '@/mock/applicants'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
+import { requestDuration, formatDuration, durationMs } from '@/utils/log'
+import { PUBLICATION_LABEL, STAGE_LABEL } from '@/constants/log'
 import { THRESHOLD_KEYS } from '@/constants/threshold'
 import { LOG_FEATURE_LABEL, LOG_RESULT_LABEL } from '@/constants/log'
 import { optionalAccountFields } from '@/utils/account'
@@ -236,15 +238,22 @@ export default {
 
   async exportLogs(params = {}) {
     await delay()
-    const rows = filterLogs(logs, params)
+    const now = Date.now()
+    const rows = filterLogs(logs, params).map(row => {
+      const duration = requestDuration(row, now)
+      const processing = row.stages.find(stage => stage.key === 'ABIS_PROCESSING')
+      return { ...row, durationLabel: duration.label, durationText: duration.text,
+        processingDuration: formatDuration(durationMs(processing?.startedAt, processing?.endedAt)) }
+    })
     return toCsvBlob(rows, [
-      ['calledAt', '调用时间'], ['userId', '申请人 ID'], ['requestId', '业务请求 ID'],
-      ['caller', '调用方标识'], ['apiLabel', '接口'],
+      ['calledAt', '接收时间'], ['userId', '用户 ID'], ['requestId', '请求 ID'],
+      ['caller', '调用方标识'], ['api', '接口类型'], ['mode', '链路', { sync: '同步', async: '异步' }],
       // feature / result 在记录里存的是枚举 key（'face' / 'success'），
       // 直接落表会在中文表头下写出英文枚举值。用常量里的 key→label 快查表转中文，
       // 与 exportAudits 直接用 roleLabel 的做法保持一致。
-      ['feature', '生物模态', LOG_FEATURE_LABEL], ['result', '结果状态', LOG_RESULT_LABEL],
-      ['costMs', '处理耗时(ms)'],
+      ['feature', '生物模态', LOG_FEATURE_LABEL], ['currentStage', '当前阶段', STAGE_LABEL],
+      ['result', '执行状态', LOG_RESULT_LABEL], ['publication', '响应发布状态', PUBLICATION_LABEL],
+      ['durationLabel', '耗时口径'], ['durationText', '请求耗时'], ['processingDuration', 'ABIS 实际处理耗时'],
     ])
   },
 
@@ -280,8 +289,8 @@ function filterLogs(list, { startTime, endTime, userId = '', requestId = '', api
     if (api && r.api !== api) return false
     if (feature && r.feature !== feature) return false
     if (result && r.result !== result) return false
-    if (minCost != null && r.costMs < minCost) return false
-    if (maxCost != null && r.costMs > maxCost) return false
+    if (minCost != null && (r.costMs == null || r.costMs < minCost)) return false
+    if (maxCost != null && (r.costMs == null || r.costMs > maxCost)) return false
     return true
   })
 }

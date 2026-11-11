@@ -2,7 +2,7 @@
 
 ABIS 生物识别系统的配套管理控制台前端。纯静态 SPA，无自有后端，全部数据经管理 API 获取。
 
-当前 Mock 预览基于联调同步版及未提交的双 ID 查询、申请人列表继续整理，以功能演示为主，沿用现有顶部导航。演示流程、入口和本轮截图见 [2026-11-09 Mock 功能预览](docs/2026-11-09-Mock功能预览.md)。
+当前 Mock 包含联调同步版、双 ID 查询、申请人列表及请求日志 Stage/Event 详情，以功能演示为主，沿用现有顶部导航。申请人演示见 [2026-11-09 Mock 功能预览](docs/2026-11-09-Mock功能预览.md)，最新日志规则见 [2026-11-10 请求日志开发说明](docs/20261110-ABIS日志mock界面开发文档.md)。
 
 ## 运行
 
@@ -31,7 +31,27 @@ Mock 保留独立数据和演示登录；新建账户及重置密码会显示可
 
 [本轮同步与验证记录](docs/2026-11-03-联调界面同步.md)。
 
-日志查询支持申请人 ID（`userId`）和业务请求 ID（暂用 `requestId`）精确查询，列表、详情与 CSV 同步展示。Mock 可用 `00000001` / `REQ-00000001` 演示；真实接口待后端确认字段及筛选能力。[双 ID 查询说明](docs/2026-11-03-日志双ID查询.md)。
+日志查询支持用户 ID（`userId`）和请求 ID（`requestId`）精确查询，列表、详情与 CSV 同步展示。每个逻辑请求仅占一行，重投、调用尝试和发布重试归入详情里的 Event；旧版“两次调用占两行”的演示口径已替换。真实接口仍待后端对接。
+
+### 请求日志 Mock（2026-11-10）
+
+在服务器执行 `npm run dev:mock -- --host 0.0.0.0`，另一台电脑打开 `http://服务器IP:5186/logs`，未登录时会先进入登录页。
+
+列表首屏提供文档规定的九类独立场景，对应 `REQ-00000001` 至 `REQ-00000009`；另外提供正常同步、处理中、等待处理和调用失败后重试成功样例。点击行或“详情”打开右侧抽屉，默认展示阶段概览，点击阶段展开事件；返回结果在抽屉下方。
+
+- `REQ-00000001`：正常异步注册，六个 Stage；总耗时 1 秒，ABIS 实际处理 480 ms。
+- `REQ-00000004`：1:N 调用超时，用户 ID 为“—”，执行结果待人工核查。
+- `REQ-00000005`：任务落库后 ACK 失败并重投；接收阶段保持成功及 50 ms 耗时。
+- `REQ-00000006` / `REQ-00000007` / `REQ-00000008`：分别演示待发布、发布重试成功、消息被退回。
+- `REQ-00000009`：采集延迟，保留已知成功结果，处理阶段缺失结束时间显示“无数据”。
+
+`00000001` 仍有 47 个请求，可从申请人详情跳转后验证分页及完整导出。查询、抽屉关闭均保留相应列表上下文。总耗时筛选只匹配已完成最终响应且耗时有效的请求；待发布、处理中或待核查显示从接收到当前的“已用时”。所有样例均为模拟数据。
+
+实现文件：[日志列表](src/views/LogView.vue)、[详情抽屉](src/components/RequestLogDrawer.vue)、[Mock 样例](src/mock/logs.js)、[状态定义](src/constants/log.js)、[耗时计算](src/utils/log.js)。同时更新 [Mock 适配器及导出](src/api/adapters/mock.js)、[数据契约](src/api/contract.js)、[页面说明](src/constants/presentation.js) 和 [浏览器回归脚本](frontend-toolkit/verification/README.md)。
+
+本轮 Mock 构建、`git diff --check` 和 145 项浏览器检查通过（原有 127 项 + 新增请求日志 18 项），浏览器错误、真实后端请求均为 0；覆盖 Stage/Event、耗时、CSV、联合筛选、上下文保留及 320–1920px 布局。构建保留既有主包体积提示。
+
+截图：[列表](docs/screenshots/request-logs-2026-11-10/list-1366.png)、[正常详情](docs/screenshots/request-logs-2026-11-10/normal.png)、[结果未知](docs/screenshots/request-logs-2026-11-10/unknown.png)、[发布重试](docs/screenshots/request-logs-2026-11-10/publish-retry.png)、[桌面展开](docs/screenshots/request-logs-2026-11-10/drawer-1366.png)、[手机展开](docs/screenshots/request-logs-2026-11-10/drawer-390.png)。
 
 [第二版截图与验证记录](docs/2026-10-27-界面预览V2.md)；[第一版记录](docs/2026-10-26-界面预览.md)。
 

@@ -11,6 +11,6 @@ export const PAGE_DESCRIPTIONS = {
   applicants: '查询当前已入库人员，查看入库信息与相关调用记录',
   threshold: '管理人脸与指纹识别的默认匹配阈值',
   accounts: '管理控制台账户、角色与访问状态',
-  logs: '按申请人 ID、业务请求 ID 或调用条件追查接口记录',
+  logs: '按请求或用户追查处理阶段、事件与响应结果',
   audits: '追溯控制台操作与配置变更记录',
 }

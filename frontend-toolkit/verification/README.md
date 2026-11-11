@@ -1,6 +1,6 @@
 # ABIS 浏览器回归检查
 
-这是与工程依赖隔离的 Node.js Playwright 检查包。原 webapp-testing 技能使用 Python，本目录使用 Node.js Playwright。`npm test` 顺序运行界面回归、个人账户、监控卡片、最新联调同步、日志 ID 及申请人列表专项检查。
+这是与工程依赖隔离的 Node.js Playwright 检查包。原 webapp-testing 技能使用 Python，本目录使用 Node.js Playwright。`npm test` 顺序运行界面回归、个人账户、监控卡片、最新联调同步、日志 ID、申请人列表及请求日志 Stage/Event 专项检查。
 
 先在工程根目录启动 Mock，保持服务运行：
 
@@ -44,3 +44,9 @@ Playwright 固定为本次使用的 1.64.1，package-lock.json 已提供；脚�
 `review-log-ids.mjs` 验证申请人 `userId` 和业务请求 `requestId` 的独立/组合精确查询、前导零与空白处理、回车查询、分页保留、CSV 导出所有匹配结果、缺失 ID 兼容展示、重置与手机端列遮挡。单独运行 `node review-log-ids.mjs`，报告和截图位于 `qa-output/log-ids/`。
 
 `review-applicants.mjs` 验证申请人一级导航、两角色查看权限、独立在库人员、查询/分页、详情与日志跳转、失败和请求乱序，以及 320–1920px 列表/详情布局。单独运行 `node review-applicants.mjs`；报告和截图位于 `qa-output/applicants/`。
+
+## 2026-11-10 请求日志
+
+`review-request-logs.mjs` 验证每个逻辑请求一行、九类独立场景、同步三阶段和异步六阶段、键盘展开 Event、业务失败与传输失败分离、超时待核查、ACK/重投、调用及发布重试历史、消息退回、采集延迟、耗时口径、联合筛选、关闭后上下文保留和 320–1920px 布局。单独运行 `node review-request-logs.mjs`，报告及截图位于 `qa-output/request-logs/`。
+
+原日志 ID 专项同步改为每个请求一行的断言；申请人 `00000001` 仍有 47 个逻辑请求，分页及导出完整性检查继续保留。

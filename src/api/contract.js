@@ -70,15 +70,35 @@
 /**
  * @typedef {Object} LogRecord
  * @property {number} id
- * @property {string|null} [userId] 申请人 ID，对应业务 userId，字符串保留前导零；缺失显示破折号
- * @property {string|null} [requestId] 业务请求 ID，暂定字段名，真实接口映射待确认；重试可共享此 ID
+ * @property {string|null} userId 业务对象 ID，字符串保留前导零；未指定对象的 1:N 识别不回填候选人
+ * @property {string} requestId 逻辑请求唯一标识，重投、调用尝试和发布重试归入同一请求
+ * @property {'sync'|'async'} mode 同步三阶段、异步六阶段
+ * @property {string} scenario Mock 场景说明
+ * @property {string} receivedAt 接收时间，带时区 ISO 格式
+ * @property {string|null} responseSentAt 同步服务端完成响应发送时间
+ * @property {string|null} publishedAt 异步最终响应通过路由且可靠发布确认的时间
+ * @property {'published'|'pending'|'none'|'sync'} publication 独立于业务执行结果
+ * @property {string} currentStage 当前阶段或需要关注的阶段
+ * @property {boolean} collectionDelayed 日志采集延迟，不改变已有证据的判定
+ * @property {LogStage[]} stages 按链路逻辑顺序排列，可以在时间上重叠
+ * @property {Object|null} response 明确的返回结果；null 表示业务结果未确认
  * @property {string} calledAt
  * @property {string} caller
  * @property {string} api
  * @property {string} apiLabel
  * @property {'face'|'finger'} feature
- * @property {'success'|'failure'} result
- * @property {number} costMs
+ * @property {'success'|'failure'|'running'|'waiting'|'unknown'} result 执行状态
+ * @property {number|null} costMs 已完成的请求总耗时；非最终响应或时间无效时为 null
+ */
+
+/**
+ * @typedef {Object} LogStage
+ * @property {string} key 阶段名
+ * @property {'WAITING'|'RUNNING'|'SUCCESS'|'FAILED'|'UNKNOWN'} status
+ * @property {boolean} applicable false 表示确定不会执行，展示不适用
+ * @property {string|null} startedAt 带时区 ISO 时间
+ * @property {string|null} endedAt 缺少时间不推断耗时
+ * @property {Array<{action:string, at:string, status:'STARTED'|'SUCCESS'|'FAILED', errorCode:string|null, description:string}>} events 保留每次尝试
  */
 
 /**
@@ -111,11 +131,11 @@
  * @property {number} [pageSize]
  * @property {string} [startTime] 见下方 ⚠ —— 必须是 'YYYY-MM-DD HH:mm:ss'
  * @property {string} [endTime]   同上
- * @property {string} [api]       LOG_APIS 的 key（comparison / verification / identification / add / delete）
+ * @property {string} [api]       LOG_APIS 的 key（comparison / verification / identification / enrollment / delete）
  * @property {'face'|'finger'} [feature]
- * @property {'success'|'failure'} [result]
- * @property {number} [minCost]
- * @property {number} [maxCost]
+ * @property {'success'|'failure'|'running'|'waiting'|'unknown'} [result]
+ * @property {number} [minCost] 只筛选已完成且总耗时有效的请求
+ * @property {number} [maxCost] 同上
  */
 
 /**
