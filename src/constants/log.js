@@ -32,12 +32,11 @@ export const LOG_FEATURE_LABEL = Object.fromEntries(LOG_FEATURES.map((f) => [f.k
 export const LOG_RESULT_LABEL = Object.fromEntries(LOG_RESULTS.map((r) => [r.key, r.label]))
 export const LOG_RESULT_TAG_TYPE = { success: 'success', failure: 'danger', running: 'primary', waiting: 'info', unknown: 'warning' }
 
-export const SYNC_STAGES = ['ABIS_RECEIVED', 'ABIS_PROCESSING', 'ABIS_RESPONDED']
-export const ASYNC_STAGES = ['ADAPTER_RECEIVED', 'ADAPTER_CALLING', ...SYNC_STAGES, 'ADAPTER_RESPONDED']
+export const SYNC_STAGES = ['ABIS_HANDLING']
+export const ASYNC_STAGES = ['ADAPTER_RECEIVED', 'ADAPTER_CALLING', 'ADAPTER_RESPONDED']
 export const STAGE_LABEL = {
-  ADAPTER_RECEIVED: '适配服务接收', ADAPTER_CALLING: '适配服务调用 ABIS',
-  ABIS_RECEIVED: 'ABIS 接收', ABIS_PROCESSING: 'ABIS 业务处理',
-  ABIS_RESPONDED: 'ABIS 发送响应', ADAPTER_RESPONDED: '适配服务发布响应',
+  ADAPTER_RECEIVED: '适配服务接收请求', ADAPTER_CALLING: '调用 ABIS',
+  ABIS_HANDLING: 'ABIS 处理', ADAPTER_RESPONDED: '发布响应',
 }
 export const STAGE_STATUS_LABEL = { WAITING: '等待中', RUNNING: '进行中', SUCCESS: '成功', FAILED: '失败', UNKNOWN: '结果未知' }
 export const STAGE_STATUS_TYPE = { WAITING: 'info', RUNNING: 'primary', SUCCESS: 'success', FAILED: 'danger', UNKNOWN: 'warning' }

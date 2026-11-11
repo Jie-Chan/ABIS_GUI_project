@@ -11,7 +11,7 @@ import { buildLogRecords } from '@/mock/logs'
 import { buildApplicants } from '@/mock/applicants'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
-import { requestDuration, formatDuration, durationMs } from '@/utils/log'
+import { requestDuration, formatDuration, durationMs, projectRequest, handlingStages, processingSpans } from '@/utils/log'
 import { PUBLICATION_LABEL, STAGE_LABEL } from '@/constants/log'
 import { THRESHOLD_KEYS } from '@/constants/threshold'
 import { LOG_FEATURE_LABEL, LOG_RESULT_LABEL } from '@/constants/log'
@@ -241,9 +241,9 @@ export default {
     const now = Date.now()
     const rows = filterLogs(logs, params).map(row => {
       const duration = requestDuration(row, now)
-      const processing = row.stages.find(stage => stage.key === 'ABIS_PROCESSING')
+      const processing = handlingStages(row).flatMap(stage => processingSpans(stage).map(span => ({ ...span, attemptId: stage.attemptId })))
       return { ...row, durationLabel: duration.label, durationText: duration.text,
-        processingDuration: formatDuration(durationMs(processing?.startedAt, processing?.endedAt)) }
+        processingDuration: processing.length ? processing.map(span => `${processing.length > 1 ? `${span.attemptId}: ` : ''}${formatDuration(durationMs(span.start?.at, span.end?.at))}`).join(' / ') : '无数据' }
     })
     return toCsvBlob(rows, [
       ['calledAt', '接收时间'], ['userId', '用户 ID'], ['requestId', '请求 ID'],
@@ -281,7 +281,7 @@ export default {
 function filterLogs(list, { startTime, endTime, userId = '', requestId = '', api, feature, result, minCost, maxCost } = {}) {
   const applicant = userId.trim()
   const request = requestId.trim()
-  return list.filter((r) => {
+  return list.map(projectRequest).filter((r) => {
     if (applicant && r.userId !== applicant) return false
     if (request && r.requestId !== request) return false
     if (startTime && r.calledAt < startTime) return false

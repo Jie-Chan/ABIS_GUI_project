@@ -72,7 +72,7 @@
  * @property {number} id
  * @property {string|null} userId 业务对象 ID，字符串保留前导零；未指定对象的 1:N 识别不回填候选人
  * @property {string} requestId 逻辑请求唯一标识，重投、调用尝试和发布重试归入同一请求
- * @property {'sync'|'async'} mode 同步三阶段、异步六阶段
+ * @property {'sync'|'async'} mode 同步一个 ABIS_HANDLING；异步三个顶层阶段，调用阶段内嵌 ABIS_HANDLING
  * @property {string} scenario Mock 场景说明
  * @property {string} receivedAt 接收时间，带时区 ISO 格式
  * @property {string|null} responseSentAt 同步服务端完成响应发送时间
@@ -80,8 +80,7 @@
  * @property {'published'|'pending'|'none'|'sync'} publication 独立于业务执行结果
  * @property {string} currentStage 当前阶段或需要关注的阶段
  * @property {boolean} collectionDelayed 日志采集延迟，不改变已有证据的判定
- * @property {LogStage[]} stages 按链路逻辑顺序排列，可以在时间上重叠
- * @property {Object|null} response 明确的返回结果；null 表示业务结果未确认
+ * @property {LogStage[]} stages 按链路逻辑顺序排列，可以在时间上重叠；响应正文存于对应发送 Event
  * @property {string} calledAt
  * @property {string} caller
  * @property {string} api
@@ -94,11 +93,32 @@
 /**
  * @typedef {Object} LogStage
  * @property {string} key 阶段名
+ * @property {string} instanceId 阶段实例唯一标识，同一请求可有多次 ABIS 实际执行
+ * @property {string} [attemptId] 对应调用尝试
  * @property {'WAITING'|'RUNNING'|'SUCCESS'|'FAILED'|'UNKNOWN'} status
  * @property {boolean} applicable false 表示确定不会执行，展示不适用
  * @property {string|null} startedAt 带时区 ISO 时间
  * @property {string|null} endedAt 缺少时间不推断耗时
- * @property {Array<{action:string, at:string, status:'STARTED'|'SUCCESS'|'FAILED', errorCode:string|null, description:string}>} events 保留每次尝试
+ * @property {boolean} [retryPending] 保留阶段状态枚举，展示文案为待重试
+ * @property {LogStage[]} [children] ADAPTER_CALLING 内的 ABIS_HANDLING 实例
+ * @property {LogEvent[]} events 保留每次尝试，展示按发生时间排序
+ */
+
+/**
+ * @typedef {Object} LogEvent
+ * @property {string} id 事件唯一标识
+ * @property {string} requestId 逻辑请求标识
+ * @property {string} kind 接收、业务开始/结束、发送响应及适配服务动作类型
+ * @property {string} action 中文动作说明
+ * @property {string|null} at 事件发生时间，缺失时不猜测
+ * @property {string} [observedAt] 采集时间，不用于排序或耗时
+ * @property {'STARTED'|'SUCCESS'|'FAILED'} status 本次动作的结果
+ * @property {string|null} errorCode
+ * @property {string} description
+ * @property {string} [attemptId] 调用尝试标识
+ * @property {string} [executionId] 业务处理开始与结束配对标识
+ * @property {{userId:string|null,api:string}} [payload] 接收 Event 的入口字段；不同入口分别保留
+ * @property {Object|null} [responseBody] 此次 ABIS 发送响应 Event 的正文，不回退到其他请求或其他尝试
  */
 
 /**

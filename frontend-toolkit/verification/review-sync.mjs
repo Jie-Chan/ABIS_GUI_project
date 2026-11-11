@@ -52,6 +52,10 @@ try {
     const query = await page.evaluate(() => window.queryCalls.at(-1))
     assert.equal(new Date(query.endTime) - new Date(query.startTime), 3600000)
     await button('重置').click(); await loaded()
+    if (path === '/logs') {
+      await page.locator('.el-pagination__sizes .el-select').click()
+      await page.getByRole('option', { name: '5条/页', exact: true }).click(); await loaded()
+    }
     await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded()
     assert.equal((await page.evaluate(() => window.queryCalls.at(-1))).page, 2)
     await button('查询').click(); await loaded()
@@ -67,9 +71,9 @@ try {
     }, method)
     await button('查询').click(); await button('查询').click()
     assert.equal(await page.evaluate(() => window.pendingQueries.length), 2)
-    await page.evaluate(() => window.pendingQueries[1].resolve({ total: 1, items: [{ ...window.querySample, userId: 'latest-result', caller: 'latest-result', operator: 'latest-result' }] }))
+    await page.evaluate(() => window.pendingQueries[1].resolve({ total: 1, items: [{ ...window.querySample, scenario: 'latest-result', caller: 'latest-result', operator: 'latest-result' }] }))
     await loaded()
-    await page.evaluate(() => window.pendingQueries[0].resolve({ total: 1, items: [{ ...window.querySample, userId: 'stale-result', caller: 'stale-result', operator: 'stale-result' }] }))
+    await page.evaluate(() => window.pendingQueries[0].resolve({ total: 1, items: [{ ...window.querySample, scenario: 'stale-result', caller: 'stale-result', operator: 'stale-result' }] }))
     await page.getByText('latest-result', { exact: true }).waitFor()
     assert.equal(await page.getByText('stale-result', { exact: true }).count(), 0)
     await button('查询').click(); await button('查询').click()

@@ -2,7 +2,7 @@
 
 ABIS 生物识别系统的配套管理控制台前端。纯静态 SPA，无自有后端，全部数据经管理 API 获取。
 
-当前 Mock 包含联调同步版、双 ID 查询、申请人列表及请求日志 Stage/Event 详情，以功能演示为主，沿用现有顶部导航。申请人演示见 [2026-11-09 Mock 功能预览](docs/2026-11-09-Mock功能预览.md)，最新日志规则见 [2026-11-10 请求日志开发说明](docs/20261110-ABIS日志mock界面开发文档.md)。
+当前 Mock 包含联调同步版、双 ID 查询、申请人列表及请求日志 Stage/Event 详情，以功能演示为主，沿用现有顶部导航。申请人演示见 [2026-11-09 Mock 功能预览](docs/2026-11-09-Mock功能预览.md)，最新日志规则见 [2026-11-11 请求日志开发说明](docs/20261111-ABIS日志mock界面开发文档.md)。
 
 ## 运行
 
@@ -33,25 +33,39 @@ Mock 保留独立数据和演示登录；新建账户及重置密码会显示可
 
 日志查询支持用户 ID（`userId`）和请求 ID（`requestId`）精确查询，列表、详情与 CSV 同步展示。每个逻辑请求仅占一行，重投、调用尝试和发布重试归入详情里的 Event；旧版“两次调用占两行”的演示口径已替换。真实接口仍待后端对接。
 
-### 请求日志 Mock（2026-11-10）
+### 请求日志 Mock（2026-11-11）
 
 在服务器执行 `npm run dev:mock -- --host 0.0.0.0`，另一台电脑打开 `http://服务器IP:5186/logs`，未登录时会先进入登录页。
 
-列表首屏提供文档规定的九类独立场景，对应 `REQ-00000001` 至 `REQ-00000009`；另外提供正常同步、处理中、等待处理和调用失败后重试成功样例。点击行或“详情”打开右侧抽屉，默认展示阶段概览，点击阶段展开事件；返回结果在抽屉下方。
+默认严格展示 11 次接口调用：先是 U001–U003 的异步业务流程，再是 U004–U007 的独立查重异常，最后是 U008 的同步删除。每次调用有独立请求 ID，同一用户的后续调用按业务发生时间递增；重投和重试只作为原请求的 Event。点击行或“详情”打开右侧抽屉，关闭后保留查询条件、分页及列表滚动位置。
 
-- `REQ-00000001`：正常异步注册，六个 Stage；总耗时 1 秒，ABIS 实际处理 480 ms。
-- `REQ-00000004`：1:N 调用超时，用户 ID 为“—”，执行结果待人工核查。
-- `REQ-00000005`：任务落库后 ACK 失败并重投；接收阶段保持成功及 50 ms 耗时。
-- `REQ-00000006` / `REQ-00000007` / `REQ-00000008`：分别演示待发布、发布重试成功、消息被退回。
-- `REQ-00000009`：采集延迟，保留已知成功结果，处理阶段缺失结束时间显示“无数据”。
+| 请求 ID | 用户 ID | 接口 | 演示场景 |
+| --- | --- | --- | --- |
+| `REQ-00000001` | `U001` | `enrollment` | 注册成功，响应已发布；总耗时 320 ms，ABIS 处理阶段 180 ms，实际处理 120 ms。 |
+| `REQ-00000002` | `U001` | `identification` | 查重成功，候选列表为空，流程完成。 |
+| `REQ-00000003` | `U002` | `enrollment` | 注册成功，响应已发布。 |
+| `REQ-00000004` | `U002` | `identification` | 查重成功，命中已有用户 U001；列表仍显示待查对象 U002。 |
+| `REQ-00000005` | `U002` | `delete` | 删除本次新注册的 U002，已有候选人 U001 不受影响。 |
+| `REQ-00000006` | `U003` | `enrollment` | 等待响应超时，结果待人工核查，暂无最终响应；不再生成查重或删除请求。 |
+| `REQ-00000007` | `U004` | `identification` | 已注册对象查重，任务落库后 ACK 异常及重投，接收成功，查重继续。 |
+| `REQ-00000008` | `U005` | `identification` | 已注册对象查重，确认未发出的连接超时，等待重试。 |
+| `REQ-00000009` | `U006` | `identification` | ABIS 明确返回查重失败，失败响应已交付；当前阶段为 ABIS 处理。 |
+| `REQ-00000010` | `U007` | `identification` | ABIS 查重成功，响应发布失败待重试；执行成功与待发布独立展示。 |
+| `REQ-00000011` | `U008` | `delete` | 正常同步删除，响应发布状态为“—”。 |
 
-`00000001` 仍有 47 个请求，可从申请人详情跳转后验证分页及完整导出。查询、抽屉关闭均保留相应列表上下文。总耗时筛选只匹配已完成最终响应且耗时有效的请求；待发布、处理中或待核查显示从接收到当前的“已用时”。所有样例均为模拟数据。
+异步抽屉仅有“适配服务接收请求 → 调用 ABIS → 发布响应”三个顶层 Stage，“ABIS 处理”嵌在调用阶段内；同步只有一个“ABIS 处理”。展开后展示“接收请求 → 业务处理 → 发送响应”，业务开始/结束合并成一项。点击发送记录旁的“查看响应”，在当前抽屉中展开对应请求、尝试及 Event 的格式化 JSON；不会借用其他记录的响应。
 
-实现文件：[日志列表](src/views/LogView.vue)、[详情抽屉](src/components/RequestLogDrawer.vue)、[Mock 样例](src/mock/logs.js)、[状态定义](src/constants/log.js)、[耗时计算](src/utils/log.js)。同时更新 [Mock 适配器及导出](src/api/adapters/mock.js)、[数据契约](src/api/contract.js)、[页面说明](src/constants/presentation.js) 和 [浏览器回归脚本](frontend-toolkit/verification/README.md)。
+列表、详情、筛选和导出使用同一入口取值规则：异步取适配服务接收 Event，同步取 ABIS 接收 Event，不使用候选人 ID 回填。Stage/Event 按发生时间展示，采集时间不参与耗时计算。历史异常不会覆盖当前阻塞阶段，业务结果与响应发布状态独立。
 
-本轮 Mock 构建、`git diff --check` 和 145 项浏览器检查通过（原有 127 项 + 新增请求日志 18 项），浏览器错误、真实后端请求均为 0；覆盖 Stage/Event、耗时、CSV、联合筛选、上下文保留及 320–1920px 布局。构建保留既有主包体积提示。
+按 `userId` 查询 `U001`、`U002`、`U003`，分别返回 2、3、1 条请求；可叠加请求 ID、接口类型等条件。默认每页 20 条展示全部 11 行，也可选择每页 5 条验证分页；CSV 导出全部匹配记录。总耗时筛选只匹配已完成最终响应且耗时有效的请求，未结束的请求显示“已用时”。
 
-截图：[列表](docs/screenshots/request-logs-2026-11-10/list-1366.png)、[正常详情](docs/screenshots/request-logs-2026-11-10/normal.png)、[结果未知](docs/screenshots/request-logs-2026-11-10/unknown.png)、[发布重试](docs/screenshots/request-logs-2026-11-10/publish-retry.png)、[桌面展开](docs/screenshots/request-logs-2026-11-10/drawer-1366.png)、[手机展开](docs/screenshots/request-logs-2026-11-10/drawer-390.png)。
+申请人列表继续保留独立的 68 人 Mock 快照和带入 ID 查询日志的行为；其原有数字 ID 若不在本轮 U001–U008 日志样例中，显示无匹配记录。不会用日志推算在库状态，也不会将候选人回填为请求用户。所有数据均为 Mock，人工核查只读。
+
+实现文件：[日志列表](src/views/LogView.vue)、[详情抽屉](src/components/RequestLogDrawer.vue)、[嵌套 Stage/Event](src/components/RequestLogStage.vue)、[Mock 样例](src/mock/logs.js)、[状态定义](src/constants/log.js)、[摘要及耗时计算](src/utils/log.js)。同时更新 [Mock 适配器及导出](src/api/adapters/mock.js)、[数据契约](src/api/contract.js) 和 [浏览器回归脚本](frontend-toolkit/verification/README.md)。
+
+本轮 `npm run build:mock`、`git diff --check` 和 145 项浏览器检查通过（其余回归 127 项 + 最新请求流程 18 项），浏览器错误、真实后端请求均为 0。已核对 11 行默认顺序、U001/U002/U003 的 2/3/1 条查询结果、候选人和删除对象、四类查重异常、320/180/120 ms 耗时、对应响应、完整 CSV、上下文保留及 320–1920px 布局。构建保留既有主包体积提示。
+
+截图：[默认分组列表](docs/screenshots/request-logs-2026-11-11/01-list.png)、[异步概览](docs/screenshots/request-logs-2026-11-11/02-async-overview.png)、[内嵌 ABIS 处理](docs/screenshots/request-logs-2026-11-11/03-nested-handling.png)、[所选响应](docs/screenshots/request-logs-2026-11-11/04-selected-response.png)、[同步处理](docs/screenshots/request-logs-2026-11-11/05-sync.png)、[手机响应](docs/screenshots/request-logs-2026-11-11/06-response-mobile.png)。
 
 [第二版截图与验证记录](docs/2026-10-27-界面预览V2.md)；[第一版记录](docs/2026-10-26-界面预览.md)。
 

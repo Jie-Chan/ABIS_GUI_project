@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 import api from '@/api'
 import UiIcon from '@/components/UiIcon.vue'
 import RequestLogDrawer from '@/components/RequestLogDrawer.vue'
-import { requestDuration, formatLogTime } from '@/utils/log'
+import { requestDuration, formatLogTime, projectRequest } from '@/utils/log'
 import {
   downloadBlob,
   timestampedName,
@@ -97,7 +97,7 @@ async function load() {
   try {
     const result = await api.listLogs({ ...query.value })
     if (requestId !== requestSequence) return
-    rows.value = result.items
+    rows.value = result.items.map(projectRequest)
     total.value = result.total
   } catch (e) {
     if (requestId !== requestSequence) return
@@ -237,7 +237,7 @@ watch(() => route.query.userId, () => {
         :current-page="query.page"
         :page-size="query.pageSize"
         :total="total"
-        :page-sizes="[20, 50, 100]"
+        :page-sizes="[5, 10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next"
         style="margin-top: 12px; justify-content: flex-end"
         @update:current-page="changePage"
