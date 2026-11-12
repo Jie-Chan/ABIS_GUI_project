@@ -1,62 +1,67 @@
-/** 最新 2026-11-11 文档：固定 11 次接口调用，重投及重试仅保留为原请求的 Event。 */
+/** 最新 2026-11-11 文档：15 次接口调用，重投及重试仅保留为原请求的 Event。 */
+import { MULTI_CANDIDATE_CASES } from '@/mock/identification'
 import { handlingSpan, projectRequest } from '@/utils/log'
 
 const REQUESTS = [
-  { userId: 'U001', api: 'enrollment', scenario: 'U001 注册成功' },
-  { userId: 'U001', api: 'identification', scenario: 'U001 查重成功，未命中候选人' },
-  { userId: 'U002', api: 'enrollment', scenario: 'U002 注册成功' },
-  { userId: 'U002', api: 'identification', scenario: 'U002 查重成功，命中已有用户 U001' },
-  { userId: 'U002', api: 'delete', scenario: '删除本次新注册的 U002' },
-  { userId: 'U003', api: 'enrollment', scenario: 'U003 注册结果不明，流程停止' },
-  { userId: 'U004', api: 'identification', scenario: '任务落库后 ACK 异常及重投，查重继续' },
-  { userId: 'U005', api: 'identification', scenario: '连接超时，确认未发出，等待重试' },
-  { userId: 'U006', api: 'identification', scenario: 'ABIS 明确返回查重失败，失败响应已交付' },
-  { userId: 'U007', api: 'identification', scenario: '查重成功，响应发布失败待重试' },
-  { userId: 'U008', api: 'delete', scenario: 'U008 正常同步删除', mode: 'sync' },
+  { userId: 'U001', feature: 'face', api: 'enrollment', scenario: 'U001 人脸注册成功' },
+  { userId: 'U001', feature: 'finger', api: 'enrollment', scenario: 'U001 指纹注册成功' },
+  { userId: 'U001', feature: 'face', api: 'identification', scenario: 'U001 人脸查重成功，候选列表为空' },
+  { userId: 'U001', feature: 'finger', api: 'identification', scenario: 'U001 指纹查重成功，候选列表为空' },
+  { userId: 'U002', feature: 'face', api: 'enrollment', scenario: 'U002 人脸注册成功' },
+  { userId: 'U002', feature: 'face', api: 'identification', scenario: 'U002 查重命中已有用户 U001' },
+  { userId: 'U002', feature: 'face', api: 'delete', scenario: '删除本次新注册的 U002' },
+  { userId: 'U003', feature: 'face', api: 'enrollment', scenario: 'U003 注册结果不明，流程停止' },
+  { userId: 'U004', feature: 'face', api: 'identification', scenario: 'ACK 异常及重投，查重继续' },
+  { userId: 'U005', feature: 'finger', api: 'identification', scenario: '连接超时，确认未发出，等待重试' },
+  { userId: 'U006', feature: 'face', api: 'identification', scenario: 'ABIS 查重失败，失败响应已交付' },
+  { userId: 'U007', feature: 'finger', api: 'identification', scenario: '查重成功，响应发布待重试' },
+  { userId: 'U008', feature: 'face', api: 'delete', scenario: 'U008 正常同步删除', mode: 'sync' },
+  ...MULTI_CANDIDATE_CASES,
 ]
 
 function buildRequest(sample, index, base) {
-  const { userId, api, scenario, mode = 'async' } = sample
+  const { userId, api, feature, scenario, mode = 'async' } = sample
   const requestId = `REQ-${String(index + 1).padStart(8, '0')}`
   // 按业务发生顺序递增，前一次响应先于该用户下一次调用。
   const at = offset => new Date(base + index * 30000 + offset).toISOString()
   let sequence = 0
   const event = (kind, action, offset, status = 'SUCCESS', extra = {}) => ({
     id: `${requestId}-E${++sequence}`, requestId, kind, action, at: at(offset), status,
-    errorCode: null, description: status === 'STARTED' ? '本次动作已开始。' : '本次动作已确认完成。', ...extra,
+    errorCode: null, description: '', ...extra,
   })
   const stage = (key, from, to, events = []) => ({
     key, instanceId: `${requestId}-${key}`, status: 'SUCCESS', applicable: true,
     startedAt: from == null ? null : at(from), endedAt: to == null ? null : at(to), events,
   })
-  const responseBody = { requestId, userId, code: 'SUCCESS', message: api === 'identification' ? '查重成功' : api === 'delete' ? '删除成功' : '注册成功' }
-  if (api === 'identification') responseBody.candidates = index === 3 ? [{ userId: 'U001', score: 96 }] : []
+  const responseBody = { requestId, userId, feature, code: 'SUCCESS', message: api === 'identification' ? '查重成功' : api === 'delete' ? '删除成功' : '注册成功' }
+  if (api === 'identification') responseBody.candidates = sample.candidates ? sample.candidates.map(item => ({ ...item })) : userId === 'U002' ? [{ userId: 'U001', rank: 1, score: 96 }] : []
   if (api === 'delete') responseBody.deletedUserId = userId
-  if (index === 4) responseBody.message = '已删除本次新注册的 U002，已有用户 U001 未被删除'
+  if (userId === 'U002' && api === 'delete') responseBody.message = '已删除本次新注册的 U002，已有用户 U001 未被删除'
+  const requestBody = { userId, feature, api, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}), ...(api === 'enrollment' ? { images: [{ imageId: `MOCK-${requestId}`, format: 'mock-reference' }] } : {}) }
   const executionId = 'execution-attempt-1', attemptId = 'attempt-1'
   const handling = { ...stage('ABIS_HANDLING', mode === 'sync' ? 0 : 70, 250, [
-    event('RECEIVED', '接收请求', mode === 'sync' ? 0 : 70, 'SUCCESS', { attemptId, payload: { userId, api }, description: 'ABIS 入口记录本次业务对象和接口类型。' }),
+    event('RECEIVED', '接收请求', mode === 'sync' ? 0 : 70, 'SUCCESS', { attemptId, requestBody: mode === 'sync' ? requestBody : undefined, payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) }, description: 'ABIS 入口记录本次业务对象和接口类型。' }),
     event('PROCESSING_STARTED', '业务处理开始', 90, 'STARTED', { attemptId, executionId }),
     event('PROCESSING_ENDED', '业务处理结束', 210, 'SUCCESS', { attemptId, executionId }),
     event('RESPONDED', '发送响应', 250, 'SUCCESS', { attemptId, responseBody, description: '服务端已完成本次接口响应发送。' }),
   ]), attemptId, instanceId: `${requestId}-handling-${attemptId}` }
   const received = stage('ADAPTER_RECEIVED', 0, 20, [
-    event('RECEIVED', '接收请求', 0, 'SUCCESS', { payload: { userId, api }, description: '适配服务首次收到本次请求 MQ 消息。' }),
+    event('RECEIVED', '接收请求', 0, 'SUCCESS', { payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) }, description: '适配服务首次收到本次请求 MQ 消息。' }),
     event('TASK_SAVED', '任务可靠落库', 20, 'SUCCESS', { description: '任务状态 PENDING；接收 Stage 在此完成。' }),
-    event('ACK', '发送请求 ACK', 25),
+    event('ACK', '发送请求 ACK', 25, 'SUCCESS', { note: '落库后' }),
   ])
   const calling = { ...stage('ADAPTER_CALLING', 60, 270, [
-    event('CLAIMED', '获得执行槽位并提交 CALLING', 50, 'SUCCESS', { description: 'Worker 将任务从 PENDING 原子更新为 CALLING 并提交，然后发起调用。' }),
-    event('CALL_STARTED', '调用 ABIS（第 1 次）', 60, 'STARTED', { attemptId }),
+    event('CLAIMED', '取得执行槽位并提交 CALLING', 50, 'SUCCESS', { note: '本次调用前' }),
+    event('CALL_STARTED', '发起第 1 次 ABIS 调用', 60, 'STARTED', { attemptId, requestBody }),
     event('CALL_RESPONSE', '收到可解析的 ABIS 响应', 270, 'SUCCESS', { attemptId }),
   ]), children: [handling] }
   const published = stage('ADAPTER_RESPONDED', 280, 320, [
-    event('PUBLISH_STARTED', '发布响应（第 1 次）', 280, 'STARTED'),
-    event('PUBLISH_CONFIRMED', '路由通过并取得 MQ 发布确认', 320, 'SUCCESS', { description: '响应未被退回，最终响应交付完成。' }),
+    event('PUBLISH_STARTED', '发起第 1 次响应发布', 280, 'STARTED', { attemptId: 'publish-attempt-1' }),
+    event('PUBLISH_CONFIRMED', 'MQ 已确认发布', 320, 'SUCCESS', { description: '响应未被退回，最终响应交付完成。' }),
   ])
   const record = {
     id: index + 1, requestId, mode, scenario,
-    caller: mode === 'async' ? 'MOSIP-Adapter' : 'SIGATT-Portal', feature: 'face',
+    caller: mode === 'async' ? 'MOSIP-Adapter' : 'SIGATT-Portal', feature,
     result: 'success', publication: mode === 'sync' ? 'sync' : 'published', publishedAt: mode === 'sync' ? null : at(320),
     collectionDelayed: false, stages: mode === 'sync' ? [handling] : [received, calling, published],
   }
@@ -64,7 +69,7 @@ function buildRequest(sample, index, base) {
     record.publication = 'none'; record.publishedAt = null
     Object.assign(published, { status: 'WAITING', startedAt: null, endedAt: null, events: [] })
   }
-  if (index === 5) {
+  if (userId === 'U003') {
     record.result = 'unknown'; waitPublication()
     Object.assign(calling, { status: 'UNKNOWN', endedAt: null })
     calling.events = calling.events.slice(0, 2).concat(event('CALL_TIMEOUT', '等待 ABIS 响应超时', 30060, 'FAILED', {
@@ -72,17 +77,18 @@ function buildRequest(sample, index, base) {
     }))
     Object.assign(handling, { status: 'UNKNOWN', startedAt: null, endedAt: null, events: [] })
   }
-  if (index === 6) {
+  if (userId === 'U004') {
     received.events = [received.events[0], received.events[1],
       event('ACK_FAILED', 'ACK 发送异常', 25, 'FAILED', { errorCode: 'ACK_CHANNEL_CLOSED', description: '任务已可靠保存，ACK 失败不撤销接收成功状态。' }),
       event('REDELIVERED', '重复投递', 35, 'SUCCESS', { description: '按 requestId 命中原任务，不创建新请求，不重复执行业务。' }),
-      event('ACK', '发送请求 ACK', 40),
+      event('ACK', '发送请求 ACK', 40, 'SUCCESS', { note: '落库后' }),
     ]
     record.result = 'running'; waitPublication()
     Object.assign(calling, { status: 'RUNNING', endedAt: null, events: calling.events.slice(0, 2) })
     Object.assign(handling, { status: 'RUNNING', endedAt: null, events: handling.events.slice(0, 2) })
   }
-  if (index === 7) {
+  if (userId === 'U005') {
+    delete calling.events.find(e => e.kind === 'CALL_STARTED').requestBody
     record.result = 'waiting'; waitPublication()
     Object.assign(calling, { status: 'WAITING', endedAt: null, retryPending: true })
     calling.events = calling.events.slice(0, 2).concat([
@@ -91,13 +97,13 @@ function buildRequest(sample, index, base) {
     ])
     calling.children = [{ ...stage('ABIS_HANDLING', null, null), instanceId: `${requestId}-handling-unobserved`, attemptId, status: 'WAITING', applicable: false }]
   }
-  if (index === 8) {
+  if (userId === 'U006') {
     record.result = 'failure'; handling.status = 'FAILED'
     Object.assign(handling.events.find(item => item.kind === 'PROCESSING_ENDED'), { status: 'FAILED', errorCode: 'IDENTIFICATION_FAILED', description: 'ABIS 明确返回查重失败，执行结果已确认。' })
     handling.events.find(item => item.kind === 'RESPONDED').responseBody = { requestId, userId, code: 'IDENTIFICATION_FAILED', message: '查重失败' }
     calling.events.at(-1).description = '已正常取得可解析的业务失败响应，外层调用成功。'
   }
-  if (index === 9) {
+  if (userId === 'U007') {
     record.publication = 'pending'; record.publishedAt = null
     Object.assign(published, { status: 'FAILED', endedAt: null, retryPending: true })
     published.events = [published.events[0], event('PUBLISH_FAILED', '发布响应失败', 320, 'FAILED', {

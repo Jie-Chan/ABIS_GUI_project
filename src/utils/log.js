@@ -1,4 +1,4 @@
-import { LOG_APIS } from '@/constants/log'
+import { LOG_APIS, LOG_FEATURE_LABEL } from '@/constants/log'
 
 /** 日志时间采用带时区的 ISO 时间；缺失、无效或倒序均不猜测耗时。 */
 export function durationMs(start, end) {
@@ -40,7 +40,7 @@ export function requestEntry(record) {
     ? handlingStages(record).flatMap(stage => stage.events || [])
     : record.stages?.find(stage => stage.key === 'ADAPTER_RECEIVED')?.events || []
   const entry = sortEvents(events).find(event => event.kind === 'RECEIVED')
-  return { userId: entry?.payload?.userId ?? null, api: entry?.payload?.api || '', receivedAt: entry?.at || null }
+  return { userId: entry?.payload?.userId ?? null, api: entry?.payload?.api || '', feature: entry?.payload?.feature || record.feature, fingerPosition: entry?.payload?.fingerPosition ?? record.fingerPosition ?? null, receivedAt: entry?.at || null }
 }
 
 export function currentRequestStage(record) {
@@ -63,6 +63,7 @@ export function projectRequest(record) {
   const sent = handlingStages(record).flatMap(stage => stage.events || []).filter(event => event.kind === 'RESPONDED' && event.status === 'SUCCESS')
   const responseSentAt = sortEvents(sent).at(-1)?.at || null
   const result = { ...record, ...entry, responseSentAt, apiLabel: LOG_APIS.find(api => api.key === entry.api)?.label || entry.api || '—' }
+  result.operationLabel = `${LOG_FEATURE_LABEL[result.feature] || ''}${{ enrollment: '注册', identification: ' 1：N查重', delete: '删除', comparison: '比对', verification: '核验' }[result.api] || result.api}`
   result.currentStage = currentRequestStage(result)
   result.calledAt = formatLogTime(entry.receivedAt).split('.')[0]
   result.costMs = requestDuration(result).label === '总耗时' ? requestDuration(result).value : null
@@ -87,6 +88,46 @@ export function handlingSpan(stage) {
   }
 }
 
+/** 将 ABIS 实际处理插入同一调用时间线；采集时间不参与排序。 */
+export function stageTimeline(stage) {
+  const entries = (stage.events || []).map(event => ({
+    key: event.id, type: 'event', at: event.at, event,
+  }))
+  const withoutStart = []
+  for (const child of stage.children || []) {
+    const at = handlingSpan(child).startedAt
+    const entry = { key: child.instanceId, type: 'handling', at, stage: child }
+    if (at && Number.isFinite(Date.parse(at))) entries.push(entry)
+    else withoutStart.push(entry)
+  }
+  entries.sort((a, b) => {
+    const first = Date.parse(a.at), second = Date.parse(b.at)
+    if (!Number.isFinite(first)) return Number.isFinite(second) ? 1 : 0
+    if (!Number.isFinite(second)) return -1
+    return first - second
+  })
+  // 没有开始证据时只关联尝试，不拿调用时间冒充 ABIS 开始时间。
+  for (const entry of withoutStart) {
+    const index = entries.findIndex(item => item.type === 'event'
+      && item.event.kind === 'CALL_STARTED' && item.event.attemptId === entry.stage.attemptId)
+    if (index >= 0) entries.splice(index + 1, 0, entry)
+    else entries.push(entry)
+  }
+  return entries
+}
+
+export function formatEventTime(value) {
+  const text = formatLogTime(value)
+  return text === '—' ? text : text.split(' ')[1]
+}
+
+/** 同一天只写一次日期；跨天或缺失时间时保留各自的完整信息。 */
+export function formatStageTimeRange(start, end) {
+  const first = formatLogTime(start), last = formatLogTime(end)
+  const sameDay = first !== '—' && last !== '—' && first.split(' ')[0] === last.split(' ')[0]
+  return `${first} → ${sameDay ? formatEventTime(end) : last}`
+}
+
 /** 定位当前请求、当前尝试和所选发送记录，绝不回退到另一条响应。 */
 export function responseForEvent(record, selected) {
   if (selected?.requestId !== record.requestId) return null
@@ -100,4 +141,10 @@ export function formatLogTime(value) {
   const date = new Date(value)
   const pad = (n, size = 2) => String(n).padStart(size, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
+}
+
+/** 仅展示对应尝试实际记录的 ABIS 入参，不用 MQ 入口元数据代替正文。 */
+export function requestForAttempt(record, attemptId) {
+  const events = record.mode === 'sync' ? handlingStages(record).flatMap(s => s.events || []) : record.stages?.find(s => s.key === 'ADAPTER_CALLING')?.events || []
+  return events.find(e => e.requestId === record.requestId && e.attemptId === attemptId && e.kind === (record.mode === 'sync' ? 'RECEIVED' : 'CALL_STARTED'))?.requestBody ?? null
 }

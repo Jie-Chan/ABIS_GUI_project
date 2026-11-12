@@ -38,13 +38,14 @@ function routeUserId() {
   const value = Array.isArray(route.query.userId) ? route.query.userId[0] : route.query.userId
   return typeof value === 'string' ? value.trim() : ''
 }
+function routeRequestId() { const value = route.query.requestId; return typeof value === 'string' ? value.trim() : '' }
 const emptyQuery = (userId = '') => ({
   page: 1,
   pageSize: 20,
   startTime: '',
   endTime: '',
   userId,
-  requestId: '',
+  requestId: routeRequestId(),
   api: '',
   feature: '',
   result: '',
@@ -69,7 +70,7 @@ function syncTimeRange() {
 
 function resetQuery() {
   timeRange.value = []
-  query.value = emptyQuery()
+  query.value = { ...emptyQuery(), requestId: '' }
   load()
 }
 
@@ -135,7 +136,7 @@ onMounted(() => {
   load()
   clockTimer = setInterval(() => { now.value = Date.now() }, 1000)
 })
-watch(() => route.query.userId, () => {
+watch(() => [route.query.userId, route.query.requestId], () => {
   query.value = emptyQuery(routeUserId())
   timeRange.value = []
   load()
@@ -153,14 +154,15 @@ watch(() => route.query.userId, () => {
         style="margin-bottom: 12px"
       />
 
-      <el-form :inline="true" class="filters logs-filters" @submit.prevent="search">
-        <el-form-item label="用户 ID" class="log-user-filter">
-          <el-input v-model.trim="query.userId" clearable placeholder="输入完整申请人 ID" @keyup.enter="search">
+      <el-form :inline="true" class="logs-filters" @submit.prevent="search">
+        <div class="filter-row filter-row--primary">
+        <el-form-item label="请求 ID" class="log-request-filter">
+          <el-input v-model.trim="query.requestId" clearable placeholder="输入完整业务请求 ID" @keyup.enter="search">
             <template #prefix><UiIcon name="search" :size="16" /></template>
           </el-input>
         </el-form-item>
-        <el-form-item label="请求 ID" class="log-request-filter">
-          <el-input v-model.trim="query.requestId" clearable placeholder="输入完整业务请求 ID" @keyup.enter="search">
+        <el-form-item label="用户 ID" class="log-user-filter">
+          <el-input v-model.trim="query.userId" clearable placeholder="输入完整申请人 ID" @keyup.enter="search">
             <template #prefix><UiIcon name="search" :size="16" /></template>
           </el-input>
         </el-form-item>
@@ -174,6 +176,12 @@ watch(() => route.query.userId, () => {
             end-placeholder="结束时间"
           />
         </el-form-item>
+        <el-form-item class="log-actions">
+          <el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button>
+          <el-button @click="resetQuery">重置</el-button>
+        </el-form-item>
+        </div>
+        <div class="filter-row filter-row--secondary">
         <el-form-item label="接口类型" class="log-api-filter">
           <el-select v-model="query.api" clearable placeholder="全部" style="width: 240px">
             <el-option v-for="a in LOG_APIS" :key="a.key" :label="a.label" :value="a.key" />
@@ -194,10 +202,7 @@ watch(() => route.query.userId, () => {
           <span class="dash">—</span>
           <el-input-number v-model="query.maxCost" :min="0" :controls="false" placeholder="最大" style="width: 100px" />
         </el-form-item>
-        <el-form-item class="log-actions">
-          <el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button>
-          <el-button @click="resetQuery">重置</el-button>
-        </el-form-item>
+        </div>
       </el-form>
 
       <div class="results-toolbar">
@@ -206,17 +211,17 @@ watch(() => route.query.userId, () => {
       </div>
 
       <el-table :data="rows" row-key="id" class="request-table" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border style="width: 100%" @row-click="openDetail">
+        <el-table-column prop="requestId" label="请求 ID" min-width="210">
+          <template #default="{ row }"><span class="log-id">{{ row.requestId || '—' }}</span></template>
+        </el-table-column>
         <el-table-column prop="userId" label="用户 ID" min-width="110">
           <template #default="{ row }"><span class="log-id">{{ row.userId || '—' }}</span></template>
         </el-table-column>
-        <el-table-column prop="requestId" label="请求 ID" min-width="210">
-          <template #default="{ row }"><span class="log-id">{{ row.requestId || '—' }}</span><small class="request-scenario">{{ row.scenario }}</small></template>
-        </el-table-column>
         <el-table-column label="接口类型" min-width="120">
-          <template #default="{ row }">{{ row.api }}<small class="request-scenario">{{ row.mode === 'sync' ? '同步' : '异步' }} / {{ featureLabel[row.feature] }}</small></template>
+          <template #default="{ row }">{{ row.operationLabel }}<small class="request-scenario">{{ row.mode === 'sync' ? '同步' : '异步' }}</small></template>
         </el-table-column>
         <el-table-column label="接收时间" min-width="190"><template #default="{ row }">{{ formatLogTime(row.receivedAt) }}</template></el-table-column>
-        <el-table-column label="当前阶段" min-width="165"><template #default="{ row }"><span :class="{ 'attention-stage': row.result === 'unknown' || row.result === 'failure' || row.publication === 'pending' }">{{ STAGE_LABEL[row.currentStage] || '—' }}</span><small class="request-scenario">{{ row.currentStage }}</small><small v-if="row.collectionDelayed" class="collection-hint">日志可能尚未齐全</small></template></el-table-column>
+        <el-table-column label="处理环节" min-width="165"><template #default="{ row }"><span :class="{ 'attention-stage': row.result === 'unknown' || row.result === 'failure' || row.publication === 'pending' }">{{ STAGE_LABEL[row.currentStage] || '—' }}</span><small v-if="row.collectionDelayed" class="collection-hint">日志可能尚未齐全</small></template></el-table-column>
         <el-table-column label="执行状态" width="115">
           <template #default="{ row }">
             <el-tag :type="resultTagType[row.result]">{{ resultLabel[row.result] }}</el-tag>
@@ -245,7 +250,7 @@ watch(() => route.query.userId, () => {
       />
 
       <p class="note">
-        每个逻辑请求展示一行，重投和重试记录可在详情中展开查看。总耗时筛选仅匹配已完成最终响应且耗时有效的请求，不含生物图像。
+        每个逻辑请求展示一行，重投和重试记录可在详情中展开查看。总耗时筛选仅匹配已完成最终响应且耗时有效的请求。CSV 仅导出日志元数据，不包含图像。
       </p>
     </el-card>
 
@@ -259,14 +264,22 @@ watch(() => route.query.userId, () => {
 .request-table :deep(.el-table__row) { cursor: pointer; }
 .attention-stage, .collection-hint { color: var(--el-color-warning); }
 .collection-hint { display: block; font-size: 11px; }
-.log-user-filter, .log-request-filter { width: 240px; }
-@media (min-width: 1200px) {
-  .log-user-filter, .log-request-filter { width: auto; }
-}
-@media (max-width: 767px) {
-  .log-user-filter, .log-request-filter { width: 100%; }
-  .logs-page :deep(.el-table-fixed-column--right) { position: static !important; }
-  .logs-page :deep(.el-table-fixed-column--right::before) { display: none; }
+.logs-filters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.logs-filters :deep(.el-form-item) { display: flex; flex-direction: row; align-items: center; margin: 0; min-width: 0; }
+.logs-filters :deep(.el-form-item__label) { float: none; height: 32px; line-height: 32px; padding: 0 8px 0 0; white-space: nowrap; }
+.logs-filters :deep(.el-form-item__content) { min-width: 0; flex: 1; }
+.filter-row--primary .log-request-filter,.filter-row--primary .log-user-filter { flex: 1 1 210px; }
+.filter-row--primary .log-time-filter { flex: 1.7 1 400px; }
+.logs-filters :deep(.el-date-editor) { width: 100%; min-width: 0; }
+.log-actions { flex: 0 0 auto; }
+@media(max-width:767px) {
+  .filter-row--primary .log-request-filter,.filter-row--primary .log-user-filter,.filter-row--primary .log-time-filter { flex-basis: 100%; }
+  .logs-filters :deep(.el-form-item__label) { width: 100px; justify-content: flex-start; }
+  .log-api-filter,.log-feature-filter,.log-result-filter,.log-cost-filter { width: 100%; }
+  .log-api-filter :deep(.el-select),.log-feature-filter :deep(.el-select),.log-result-filter :deep(.el-select) { width: 100% !important; }
+  .log-cost-filter :deep(.el-input-number) { width: calc((100% - 25px)/2) !important; }
+  .logs-page :deep(.el-table-fixed-column--right) { position: static !important; }.logs-page :deep(.el-table-fixed-column--right::before) { display: none; }
 }
 .dash { margin: 0 8px; color: #8c99ac; }
 .note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }

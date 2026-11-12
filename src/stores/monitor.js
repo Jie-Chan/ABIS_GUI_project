@@ -14,29 +14,35 @@ export const useMonitorStore = defineStore('monitor', () => {
   const error = ref('')
 
   let timer = null
+  let sequence = 0
 
   async function refresh() {
+    const current = ++sequence
     loading.value = true
     error.value = ''
     try {
       const result = await api.getHealth()
+      if (current !== sequence) return
       items.value = result.items
       fetchedAt.value = result.fetchedAt
     } catch (e) {
+      if (current !== sequence) return
       error.value = e.message || '获取监控状态失败'
     } finally {
-      loading.value = false
+      if (current === sequence) loading.value = false
     }
   }
 
   /** 启动轮询（1 分钟）。组件卸载时务必调用 stop() */
   function start() {
-    refresh()
     stop()
+    refresh()
     timer = setInterval(refresh, MONITOR_REFRESH_INTERVAL_MS)
   }
 
   function stop() {
+    ++sequence
+    loading.value = false
     if (timer) {
       clearInterval(timer)
       timer = null

@@ -7,7 +7,7 @@
 export const LOG_APIS = [
   { key: 'comparison',     label: 'Biometric Comparison（比对）',        method: 'POST',   path: '/abis/{feature}/comparison' },
   { key: 'verification',   label: 'Biometric Verification（核验）',      method: 'POST',   path: '/abis/{feature}/verification' },
-  { key: 'identification', label: 'Biometric Identification（1:N 识别）', method: 'POST',   path: '/abis/{feature}/identification' },
+  { key: 'identification', label: '1：N查重', method: 'POST',   path: '/abis/{feature}/identification' },
   { key: 'enrollment',     label: 'Biometric Enrollment（注册）',        method: 'PUT',    path: '/abis/{feature}' },
   { key: 'delete',         label: 'Biometric Delete（删除）',            method: 'DELETE', path: '/abis/{feature}/{userId}/{delType}/{uuid}' },
 ]
@@ -35,8 +35,8 @@ export const LOG_RESULT_TAG_TYPE = { success: 'success', failure: 'danger', runn
 export const SYNC_STAGES = ['ABIS_HANDLING']
 export const ASYNC_STAGES = ['ADAPTER_RECEIVED', 'ADAPTER_CALLING', 'ADAPTER_RESPONDED']
 export const STAGE_LABEL = {
-  ADAPTER_RECEIVED: '适配服务接收请求', ADAPTER_CALLING: '调用 ABIS',
-  ABIS_HANDLING: 'ABIS 处理', ADAPTER_RESPONDED: '发布响应',
+  ADAPTER_RECEIVED: '接收请求', ADAPTER_CALLING: '调用 ABIS',
+  ABIS_HANDLING: 'ABIS 处理', ADAPTER_RESPONDED: '发布结果',
 }
 export const STAGE_STATUS_LABEL = { WAITING: '等待中', RUNNING: '进行中', SUCCESS: '成功', FAILED: '失败', UNKNOWN: '结果未知' }
 export const STAGE_STATUS_TYPE = { WAITING: 'info', RUNNING: 'primary', SUCCESS: 'success', FAILED: 'danger', UNKNOWN: 'warning' }

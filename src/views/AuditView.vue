@@ -100,7 +100,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="records-page">
+  <div class="records-page audit-page">
     <el-card>
       <el-alert
         v-if="error"
@@ -110,8 +110,8 @@ onMounted(load)
         style="margin-bottom: 12px"
       />
 
-      <el-form :inline="true" class="filters audits-filters">
-        <el-form-item label="时间范围">
+      <el-form :inline="true" class="audits-filters">
+        <el-form-item label="时间范围" class="audit-time">
           <el-date-picker
             v-model="timeRange"
             type="datetimerange"
@@ -122,15 +122,15 @@ onMounted(load)
           />
         </el-form-item>
         <el-form-item label="操作人">
-          <el-input v-model="query.operator" clearable placeholder="全部" style="width: 150px" />
+          <el-input v-model="query.operator" clearable placeholder="全部" style="width: 110px" />
         </el-form-item>
         <el-form-item label="操作类型">
-          <el-select v-model="query.action" clearable placeholder="全部" style="width: 160px">
+          <el-select v-model="query.action" clearable placeholder="全部" style="width: 130px">
             <el-option v-for="a in AUDIT_ACTIONS" :key="a" :label="a" :value="a" />
           </el-select>
         </el-form-item>
         <el-form-item label="结果">
-          <el-select v-model="query.result" clearable placeholder="全部" style="width: 110px">
+          <el-select v-model="query.result" clearable placeholder="全部" style="width: 80px">
             <el-option label="成功" value="成功" />
             <el-option label="失败" value="失败" />
           </el-select>
@@ -200,5 +200,8 @@ onMounted(load)
 </template>
 
 <style scoped>
+.audits-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; }.audits-filters > .el-form-item { margin: 0; min-width: 0; }.audits-filters .audit-time { flex: 1 1 400px; }.audits-filters :deep(.el-form-item__label) { padding-right: 8px; white-space: nowrap; }.audits-filters :deep(.el-form-item__content) { min-width: 0; flex: 1; }.audits-filters :deep(.el-date-editor) { width: 100%; min-width: 0; }
+@media(max-width:767px){.audits-filters > .el-form-item { width: 100%; }.audits-filters :deep(.el-input),.audits-filters :deep(.el-select) { width: 100% !important; }}
+
 .note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
 </style>

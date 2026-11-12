@@ -7,11 +7,10 @@
 import { mockAccounts, mockCredentials } from '@/mock/accounts'
 import { mockThresholds } from '@/mock/thresholds'
 import { buildMonitorSnapshot } from '@/mock/monitor'
-import { buildLogRecords } from '@/mock/logs'
-import { buildApplicants } from '@/mock/applicants'
+import { buildBusinessSnapshot } from '@/mock/business'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
-import { requestDuration, formatDuration, durationMs, projectRequest, handlingStages, processingSpans } from '@/utils/log'
+import { requestDuration, projectRequest } from '@/utils/log'
 import { PUBLICATION_LABEL, STAGE_LABEL } from '@/constants/log'
 import { THRESHOLD_KEYS } from '@/constants/threshold'
 import { LOG_FEATURE_LABEL, LOG_RESULT_LABEL } from '@/constants/log'
@@ -26,8 +25,7 @@ let nextAccountId = accounts.length + 1
 const credentials = mockCredentials.map((credential) => ({ ...credential }))
 let sessionAccountId = null
 
-const logs = buildLogRecords()
-const applicants = buildApplicants()
+const { logs, applicants } = buildBusinessSnapshot()
 const audits = buildAuditRecords()
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
@@ -200,19 +198,22 @@ export default {
 
   // ——— 日志与审计查询（需求 1.4 / 2.2）———
 
-  async listApplicants({ page = 1, pageSize = 20, userId = '', modality = '', startTime = '', endTime = '' } = {}) {
+  async listApplicants({ page = 1, pageSize = 20, userId = '', modality = '', startTime = '', endTime = '', sortBy = '', sortOrder = '' } = {}) {
     await delay()
     if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有申请人查看权限')
     const id = userId.trim()
     const filtered = applicants.filter(person => {
       if (id && person.userId !== id) return false
-      if (modality === 'face' && !person.faceCount) return false
-      if (modality === 'finger' && !person.fingerCount) return false
+      if (modality === 'face' && (!person.faceCount || person.fingerCount)) return false
+      if (modality === 'finger' && (!person.fingerCount || person.faceCount)) return false
       if (modality === 'both' && (!person.faceCount || !person.fingerCount)) return false
-      if (startTime && person.enrolledAt < startTime) return false
-      if (endTime && person.enrolledAt > endTime) return false
+      if (startTime && Date.parse(person.enrolledAt) < Date.parse(startTime)) return false
+      if (endTime && Date.parse(person.enrolledAt) > Date.parse(endTime) + (endTime.length === 19 ? 999 : 0)) return false
       return true
     })
+    if (['enrolledAt', 'updatedAt'].includes(sortBy) && ['ascending', 'descending'].includes(sortOrder)) {
+      filtered.sort((a, b) => (Date.parse(a[sortBy]) - Date.parse(b[sortBy])) * (sortOrder === 'ascending' ? 1 : -1) || a.userId.localeCompare(b.userId))
+    }
     return paginate(filtered.map(({ records, ...person }) => ({ ...person })), { page, pageSize })
   },
 
@@ -222,6 +223,22 @@ export default {
     const person = applicants.find(item => item.userId === userId)
     if (!person) throw new Error('申请人不存在或已不在库中')
     return { ...person, records: person.records.map(record => ({ ...record })) }
+  },
+
+  // 模拟 GUI 后端查询当前 PostgreSQL 入库记录，再返回 MinIO 图像链接。
+  async getUserImage({ userId, feature, fingerPosition = null } = {}) {
+    await delay()
+    if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有图像查看权限')
+    const person = applicants.find(item => item.userId === userId)
+    const deleted = !person && logs.some(log => log.userId === userId && log.api === 'delete' && log.result === 'success')
+    const record = person?.records.filter(item => item.feature === feature
+      && (feature !== 'finger' || !fingerPosition || item.fingerPosition === fingerPosition))
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+    return {
+      userId, feature, fingerPosition: record?.fingerPosition ?? fingerPosition,
+      status: deleted ? 'deleted' : record?.imageUrl ? 'available' : 'missing',
+      recordId: record?.recordId ?? null, imageUrl: record?.imageUrl ?? null,
+    }
   },
 
   async listLogs(params = {}) {
@@ -241,19 +258,17 @@ export default {
     const now = Date.now()
     const rows = filterLogs(logs, params).map(row => {
       const duration = requestDuration(row, now)
-      const processing = handlingStages(row).flatMap(stage => processingSpans(stage).map(span => ({ ...span, attemptId: stage.attemptId })))
-      return { ...row, durationLabel: duration.label, durationText: duration.text,
-        processingDuration: processing.length ? processing.map(span => `${processing.length > 1 ? `${span.attemptId}: ` : ''}${formatDuration(durationMs(span.start?.at, span.end?.at))}`).join(' / ') : '无数据' }
+      return { ...row, durationLabel: duration.label, durationText: duration.text }
     })
     return toCsvBlob(rows, [
-      ['calledAt', '接收时间'], ['userId', '用户 ID'], ['requestId', '请求 ID'],
+      ['calledAt', '接收时间'], ['requestId', '请求 ID'], ['userId', '用户 ID'],
       ['caller', '调用方标识'], ['api', '接口类型'], ['mode', '链路', { sync: '同步', async: '异步' }],
       // feature / result 在记录里存的是枚举 key（'face' / 'success'），
       // 直接落表会在中文表头下写出英文枚举值。用常量里的 key→label 快查表转中文，
       // 与 exportAudits 直接用 roleLabel 的做法保持一致。
-      ['feature', '生物模态', LOG_FEATURE_LABEL], ['currentStage', '当前阶段', STAGE_LABEL],
+      ['feature', '生物模态', LOG_FEATURE_LABEL], ['currentStage', '处理环节', STAGE_LABEL],
       ['result', '执行状态', LOG_RESULT_LABEL], ['publication', '响应发布状态', PUBLICATION_LABEL],
-      ['durationLabel', '耗时口径'], ['durationText', '请求耗时'], ['processingDuration', 'ABIS 实际处理耗时'],
+      ['durationLabel', '耗时口径'], ['durationText', '请求耗时'],
     ])
   },
 

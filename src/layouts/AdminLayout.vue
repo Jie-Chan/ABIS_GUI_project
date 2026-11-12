@@ -105,7 +105,7 @@ async function handleLogout() {
 
     <el-main class="workspace-main">
       <div v-if="isSettingsPage" class="breadcrumb" aria-label="当前位置"><span>设置</span><b>/</b><strong>{{ currentTitle }}</strong></div>
-      <div class="page-intro">
+      <div v-if="!['logs', 'applicants', 'monitor', 'audits'].includes(route.name)" class="page-intro">
         <span class="page-icon"><UiIcon :name="route.name" :size="25" /></span>
         <div>
           <h1>{{ currentTitle }}</h1>

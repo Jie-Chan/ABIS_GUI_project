@@ -97,7 +97,7 @@ try{
  assert.match(page.url(),/login/)
  pass('wrong password remains rejected')
  await login('admin','admin123')
- assert.deepEqual(await page.locator('.status-overview dd').allTextContents(),['6','3','3'])
+ assert.deepEqual(await page.locator('.status-overview dd').allTextContents(),['10','8','1','1'])
  assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),4)
  assert.equal(await settings.count(),1)
  assert.equal(await page.locator('.aside').count(),0)

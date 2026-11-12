@@ -1,157 +1,111 @@
-import { chromium } from 'playwright'
+import {chromium} from 'playwright'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
-const base = new URL(process.env.ABIS_PREVIEW_URL || 'http://127.0.0.1:5186').origin
-assert.match(await (await fetch(`${base}/src/api/index.js`)).text(), /"VITE_USE_MOCK": "true"/)
-const out = process.env.ABIS_QA_OUTPUT_DIR || './qa-output/applicants'
-await fs.mkdir(out, { recursive: true })
-const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1366, height: 900 }, locale: 'zh-CN', reducedMotion: 'reduce' })
+const base=new URL(process.env.ABIS_PREVIEW_URL||'http://127.0.0.1:5186').origin
+assert.match(await(await fetch(`${base}/src/api/index.js`)).text(),/"VITE_USE_MOCK": "true"/)
+const out=process.env.ABIS_QA_OUTPUT_DIR||'./qa-output/applicants';await fs.mkdir(out,{recursive:true})
+const browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1366,height:1000},locale:'zh-CN',timezoneId:'Asia/Shanghai',reducedMotion:'reduce'})
 page.setDefaultTimeout(10000)
-const checks = [], errors = [], backendRequests = []
-page.on('pageerror', e => errors.push(e.message))
-page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
-page.on('request', r => {
-  const url = new URL(r.url())
-  if (['xhr', 'fetch'].includes(r.resourceType()) && (url.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(url.pathname))) backendRequests.push(r.url())
-})
-const pass = text => { checks.push(text); console.log('PASS', text) }
-const loaded = () => page.waitForFunction(() => !document.querySelector('.el-loading-mask,.el-button.is-loading'))
-const button = name => page.getByRole('button', { name, exact: true })
-const go = async path => { await page.evaluate(path => document.querySelector('#app').__vue_app__.config.globalProperties.$router.push(path), path); await page.waitForURL(`**${path}`); await loaded() }
-const login = async (user, password) => {
-  await page.locator('.login-content input').nth(0).fill(user)
-  await page.locator('.login-content input').nth(1).fill(password)
-  await button('登录').click(); await page.waitForURL('**/monitor'); await loaded()
-}
-const search = async () => { await button('查询').click(); await loaded() }
-const reset = async () => { await button('重置').click(); await loaded() }
-const applicantId = () => page.getByPlaceholder('输入完整申请人 ID', { exact: true })
-const drawer = page.getByRole('dialog', { name: '申请人详情', exact: true })
-try {
-  await page.goto(`${base}/login`); await login('admin', 'admin123')
-  const menu = page.locator('.primary-navigation > .el-menu > .el-menu-item')
-  assert.deepEqual((await menu.allTextContents()).map(s => s.trim()), ['服务状态监控', '申请人列表', '日志查询', '审计查询'])
-  await page.getByRole('menuitem', { name: '申请人列表', exact: true }).click(); await page.waitForURL('**/applicants'); await loaded()
-  assert.equal(await page.locator('.breadcrumb').count(), 0)
-  assert.equal(await page.locator('.settings-trigger.is-active').count(), 0)
-  assert.equal(await page.locator('.el-table__row').count(), 20)
-  assert.match(await page.locator('.record-count').innerText(), /68/)
-  pass('applicant list is a top-level sibling of monitoring/logs, with unique people and pagination')
-
-  await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded()
-  assert.equal(await page.locator('.applicant-id').first().innerText(), '00000021')
-  await applicantId().fill(' 00000001 '); await applicantId().press('Enter'); await loaded()
-  assert.equal(await page.locator('.el-table__row').count(), 1)
-  assert.equal(await page.locator('.applicant-id').first().innerText(), '00000001')
-  assert.equal((await page.locator('.el-pager .is-active').innerText()).trim(), '1')
-  await button('查看详情').click(); await drawer.waitFor(); await loaded()
-  assert.match(await drawer.innerText(), /00000001/)
-  assert.equal(await drawer.locator('.el-table__row').count(), 11)
-  assert.ok(await drawer.getByText('FACE-00000001-1', { exact: true }).isVisible())
-  await drawer.getByRole('button', { name: '查看该申请人日志', exact: true }).click(); await page.waitForURL('**/logs?userId=00000001'); await loaded()
-  assert.equal(await applicantId().inputValue(), '00000001')
-  await page.getByText('暂无匹配记录', { exact: true }).waitFor()
-  await page.evaluate(() => document.querySelector('#app').__vue_app__.config.globalProperties.$router.push({ name: 'logs', query: { userId: 'U001' } }))
-  await loaded(); assert.equal(await applicantId().inputValue(), 'U001')
-  assert.match(await page.locator('.record-count').innerText(), /2/)
-  await page.evaluate(() => document.querySelector('#app').__vue_app__.config.globalProperties.$router.push({ name: 'logs', query: { userId: '00000002' } }))
-  await loaded(); assert.equal(await applicantId().inputValue(), '00000002')
-  await page.getByText('暂无匹配记录', { exact: true }).waitFor()
-  pass('exact IDs preserve zeros, new query resets pages, detail lists records and log links auto-query selected people')
-
-  await go('/applicants'); await applicantId().fill('00000068'); await search()
-  assert.equal(await page.locator('.el-table__row').count(), 1)
-  await button('查看日志').click(); await page.waitForURL('**/logs?userId=00000068'); await loaded()
-  await page.getByText('暂无匹配记录', { exact: true }).waitFor()
-  await go('/applicants')
-  await page.locator('.applicant-filters .el-select').click()
-  await page.getByRole('option', { name: '人脸和指纹', exact: true }).click(); await search()
-  assert.match(await page.locator('.record-count').innerText(), /23/)
-  const modalityRows = await page.locator('.el-table__row').allTextContents()
-  assert.ok(modalityRows.every(row => !row.includes('未入库')))
-  await applicantId().fill('00000002'); await search(); await page.getByText('暂无匹配的申请人', { exact: true }).waitFor()
-  await reset(); assert.equal(await applicantId().inputValue(), '')
-  assert.match(await page.locator('.record-count').innerText(), /68/)
-  const boundary = await page.evaluate(async () => {
-    const api = (await import('/src/api/index.js')).default
-    const sample = (await api.listApplicants({ userId: '00000001' })).items[0]
-    return api.listApplicants({ startTime: sample.enrolledAt, endTime: sample.enrolledAt })
-  })
-  assert.equal(boundary.total, 1)
-  pass('current population is independent of logs; modality/ID filters intersect, reset works and enrollment boundaries are inclusive')
-
-  await page.evaluate(async () => {
-    const api = (await import('/src/api/index.js')).default
-    window.originalApplicants = api.listApplicants
-    window.originalApplicantDetail = api.getApplicant
-    window.personSample = (await api.listApplicants({ page: 1, pageSize: 20 })).items[0]
-    window.personRequests = []
-    api.listApplicants = query => new Promise((resolve, reject) => window.personRequests.push({ query: { ...query }, resolve, reject }))
-  })
-  await button('查询').click(); await button('查询').click()
-  await page.evaluate(() => window.personRequests[1].resolve({ total: 1, items: [window.personSample] })); await loaded()
-  await page.evaluate(() => window.personRequests[0].resolve({ total: 0, items: [] }))
-  assert.equal(await page.locator('.el-table__row').count(), 1)
-  await button('查询').click()
-  await page.evaluate(() => window.personRequests[2].reject(new Error('模拟人员查询失败')))
-  await loaded(); await page.getByText('查询失败，请重试', { exact: true }).waitFor()
-  assert.equal(await page.locator('.el-table__row').count(), 0)
-  await page.evaluate(async () => { (await import('/src/api/index.js')).default.listApplicants = window.originalApplicants })
-  await reset()
-  pass('older list responses cannot overwrite newer results; failures clear prior rows and recover on retry')
-
-  await page.evaluate(async () => {
-    const api = (await import('/src/api/index.js')).default
-    api.getApplicant = async () => { throw new Error('模拟详情读取失败') }
-  })
-  await button('查看详情').first().click(); await loaded()
-  await drawer.getByText('模拟详情读取失败', { exact: true }).waitFor()
-  assert.equal(await drawer.getByRole('button', { name: '查看该申请人日志', exact: true }).count(), 0)
-  await page.evaluate(async () => { (await import('/src/api/index.js')).default.getApplicant = window.originalApplicantDetail })
-  await drawer.getByRole('button', { name: '重新读取', exact: true }).click(); await loaded()
-  assert.equal(await drawer.locator('.el-table__row').count(), 11)
-  await drawer.getByRole('button', { name: '关闭', exact: true }).click(); await drawer.waitFor({ state: 'hidden' })
-  await page.evaluate(async () => {
-    window.personDetails = []
-    const api = (await import('/src/api/index.js')).default
-    api.getApplicant = id => new Promise(resolve => window.personDetails.push({ id, resolve }))
-  })
-  await button('查看详情').first().click(); await drawer.waitFor()
-  await drawer.getByRole('button', { name: '关闭', exact: true }).click(); await drawer.waitFor({ state: 'hidden' })
-  await button('查看详情').nth(1).click()
-  await page.evaluate(async () => window.personDetails[1].resolve(await window.originalApplicantDetail(window.personDetails[1].id))); await loaded()
-  await page.evaluate(async () => window.personDetails[0].resolve(await window.originalApplicantDetail(window.personDetails[0].id)))
-  assert.ok(await drawer.getByText('00000002', { exact: true }).isVisible())
-  assert.equal(await drawer.getByText('00000001', { exact: true }).count(), 0)
-  await drawer.getByRole('button', { name: '关闭', exact: true }).click(); await drawer.waitFor({ state: 'hidden' })
-  await page.evaluate(async () => { (await import('/src/api/index.js')).default.getApplicant = window.originalApplicantDetail })
-  pass('detail errors support retry, and closing/switching people rejects stale detail results')
-
-  for (const width of [1920, 1600, 1401, 1400, 1366, 1251, 1201, 1200, 1024, 768, 390, 320]) {
-    await page.setViewportSize({ width, height: width < 768 ? 844 : 1000 })
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `page overflow at ${width}`)
-    if ([1920, 1366, 390].includes(width)) {
-      await page.screenshot({ path: `${out}/applicants-${width}.png`, fullPage: true })
-      await button('查看详情').first().click(); await loaded()
-      const rect = await drawer.boundingBox(); assert.ok(rect.x >= -1 && rect.x + rect.width <= width + 1)
-      await page.screenshot({ path: `${out}/detail-${width}.png`, fullPage: true })
-      await drawer.getByRole('button', { name: '关闭', exact: true }).click(); await drawer.waitFor({ state: 'hidden' })
-    }
-  }
-  pass('list and drawer fit 320–1920px; desktop and mobile screenshots saved')
-
-  await page.setViewportSize({ width: 1366, height: 900 })
-  await button('账户菜单').click(); await page.getByRole('menuitem', { name: '退出登录', exact: true }).click()
-  await page.locator('.el-message-box').getByRole('button', { name: '确定', exact: true }).click(); await page.waitForURL('**/login')
-  await login('ops.zhang', 'ops123'); await go('/applicants')
-  assert.equal(await page.locator('.el-table__row').count(), 20)
-  assert.equal(await page.getByRole('button', { name: '新建账户', exact: true }).count(), 0)
-  pass('operator can use the same top-level applicant page without account-management privileges')
-  assert.deepEqual(errors, []); assert.deepEqual(backendRequests, [])
-  pass('zero browser errors and zero real-backend requests')
-  await fs.writeFile(`${out}/report.json`, JSON.stringify({ checks, errors, backendRequests }, null, 2))
-  console.log(`COMPLETE ${checks.length} checks`)
-} catch (e) { await page.screenshot({ path: `${out}/failure.png`, fullPage: true }); console.error(e); process.exitCode = 1 }
-finally { await browser.close() }
+const checks=[],errors=[],backendRequests=[];const pass=s=>{checks.push(s);console.log('PASS',s)}
+page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())})
+page.on('request',r=>{const u=new URL(r.url());if(['xhr','fetch'].includes(r.resourceType())&&(u.origin!==base||/^\/(admin-api|abis-admin)(\/|$)/.test(u.pathname)))backendRequests.push(r.url())})
+const loaded=()=>page.waitForFunction(()=>!document.querySelector('.el-loading-mask,.el-button.is-loading'))
+const button=name=>page.getByRole('button',{name,exact:true}),drawer=page.getByRole('dialog',{name:'申请人详情',exact:true}),imageDialog=page.getByRole('dialog',{name:'入库图像详情',exact:true})
+const input=()=>page.getByPlaceholder('输入完整申请人 ID',{exact:true})
+const search=async()=>{await button('查询').click();await loaded()}
+const reset=async()=>{await button('重置').click();await loaded()}
+const go=async path=>{await page.evaluate(p=>document.querySelector('#app').__vue_app__.config.globalProperties.$router.push(p),path);await page.waitForURL(u=>u.pathname===path.split('?')[0]);await loaded()}
+const open=async id=>{await page.locator('.applicants-page .el-table__row').filter({hasText:id}).getByRole('button',{name:'查看详情',exact:true}).click();await drawer.waitFor();await loaded()}
+const close=async()=>{await drawer.getByRole('button',{name:'关闭',exact:true}).click();await drawer.waitFor({state:'hidden'})}
+const closeImage=async()=>{await imageDialog.getByRole('button',{name:'关闭图像',exact:true}).click();await imageDialog.waitFor({state:'hidden'})}
+const login=async(user='admin',password='admin123')=>{await page.locator('.login-content input').nth(0).fill(user);await page.locator('.login-content input').nth(1).fill(password);await button('登录').click();await page.waitForURL('**/monitor');await loaded()}
+try{
+ await page.goto(`${base}/login`);await login();await page.getByRole('menuitem',{name:'申请人列表',exact:true}).click();await page.waitForURL('**/applicants');await loaded()
+ const snapshot=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.originalApplicantList=api.listApplicants;window.originalApplicantDetail=api.getApplicant;return{people:(await api.listApplicants()).items,logs:(await api.listLogs({pageSize:100})).items,u001:await api.getApplicant('U001'),u006:await api.getApplicant('U006')}})
+ assert.deepEqual(snapshot.people.map(p=>p.userId),['U001','U004','U005','U006','U007','U009','U010','U101','U102','U103','U201','U202','U203']);assert.equal(await page.locator('.applicants-page .el-table__row').count(),13)
+ assert.equal(snapshot.u001.faceCount,1);assert.equal(snapshot.u001.fingerCount,10);assert.equal(snapshot.u001.records.length,11)
+ const face=snapshot.logs[0].stages[1].children[0].events.find(e=>e.kind==='PROCESSING_ENDED').at,finger=snapshot.logs[1].stages[1].children[0].events.find(e=>e.kind==='PROCESSING_ENDED').at
+ assert.equal(Date.parse(snapshot.u001.enrolledAt),Date.parse(face));assert.equal(Date.parse(snapshot.u001.updatedAt),Date.parse(finger))
+ assert.ok(snapshot.u001.records.every(r=>r.userId==='U001'&&r.requestId));assert.ok(snapshot.u006.records.every(r=>r.requestId==null))
+ pass('shared snapshot contains U001 plus four pre-enrolled users; U001 has 1/10 records with timestamps from two confirmed enrollments')
+ assert.ok(!snapshot.people.some(p=>['U002','U003','U008'].includes(p.userId)))
+ const consistent=await page.evaluate(async()=>{const {buildApplicants}=await import('/src/mock/applicants.js');const {buildLogRecords}=await import('/src/mock/logs.js');const logs=buildLogRecords();return{withoutFinger:buildApplicants(logs.map(r=>r.userId==='U001'&&r.api==='enrollment'&&r.feature==='finger'?{...r,result:'unknown'}:r)).map(p=>p.userId),u006:(await window.originalApplicantDetail('U006'))}})
+ assert.ok(!consistent.withoutFinger.includes('U001'));assert.deepEqual(consistent.u006,snapshot.u006)
+ pass('pending U003 and deleted U002/U008 stay out of active people; U001 requires both enrollments and failed identification never changes U006 data')
+ await input().fill(' U001 ');await input().press('Enter');await loaded();assert.equal(await page.locator('.applicants-page .el-table__row').count(),1)
+ await open('U001');assert.equal(await drawer.getByRole('button',{name:'查看该申请人日志',exact:true}).count(),0)
+ assert.match(await drawer.locator('[data-modality="face"] h2').innerText(),/1 条/);assert.match(await drawer.locator('[data-modality="finger"] h2').innerText(),/10 条/)
+ assert.equal(await drawer.locator('.finger-slot').count(),10);assert.equal(await drawer.locator('img').count(),11)
+ const thumbnail=drawer.locator('[data-record-id="FACE-U001-1"] img');await thumbnail.waitFor();const thumbSrc=await thumbnail.getAttribute('src')
+ await drawer.getByRole('button',{name:'查看入库图像 FACE-U001-1',exact:true}).click();await imageDialog.waitFor()
+ assert.equal(await imageDialog.locator('img').getAttribute('src'),thumbSrc);assert.match(await imageDialog.innerText(),/FACE-U001-1/)
+ await closeImage();await close()
+ pass('exact U001 query gives one row; drawer groups face/fingers, has no person-level log button, and zoom matches thumbnail record/image')
+ await page.locator('.applicants-page .el-table__row').getByRole('button',{name:'查看日志',exact:true}).click();await page.waitForURL('**/logs?userId=U001');await loaded()
+ assert.equal(await input().inputValue(),'U001');assert.equal(await page.locator('.request-table .el-table__row').count(),4)
+ await page.goBack();await page.waitForURL('**/applicants');await loaded();assert.equal(await input().inputValue(),'U001');assert.equal(await page.locator('.applicants-page .el-table__row').count(),1)
+ pass('list-level log navigation auto-queries all four U001 requests and browser back restores the applicant filter')
+ await open('U001');await drawer.getByRole('button',{name:'查看入库图像 FINGER-U001-1',exact:true}).click();await imageDialog.waitFor()
+ assert.match(await imageDialog.innerText(),/左手拇指/);await imageDialog.getByRole('button',{name:'查看本次入库日志',exact:true}).click();await page.waitForURL(u=>u.pathname==='/logs'&&u.searchParams.get('requestId')==='REQ-00000002');await loaded()
+ assert.equal(await page.locator('.request-table .el-table__row').count(),1);assert.equal(await page.getByPlaceholder('输入完整业务请求 ID').inputValue(),'REQ-00000002')
+ await page.goBack();await page.waitForURL('**/applicants');await loaded();await reset()
+ pass('record-level log entry locates the exact fingerprint enrollment request without adding a person-level drawer log button')
+ await open('U004');await drawer.locator('[data-modality="finger"]').getByText('未入库',{exact:true}).waitFor();assert.equal(await drawer.locator('[data-modality="face"] img').count(),1);await close()
+ await open('U005');const left=drawer.locator('[data-finger="left_index"]');assert.equal(await left.locator('img').count(),1)
+ const firstSrc=await left.locator('img').getAttribute('src');await left.locator('.el-select').click();await page.getByRole('option',{name:/第 2 条：FINGER-U005-LI-2/}).click()
+ const secondSrc=await left.locator('img').getAttribute('src');assert.notEqual(secondSrc,firstSrc)
+ await left.getByRole('button',{name:'查看入库图像 FINGER-U005-LI-2',exact:true}).click();await imageDialog.waitFor();assert.equal(await imageDialog.locator('img').getAttribute('src'),secondSrc);assert.match(await imageDialog.innerText(),/FINGER-U005-LI-2.*左手食指/s);await closeImage()
+ const missing=drawer.locator('[data-finger="right_thumb"]');await missing.getByText('图像不可用',{exact:true}).waitFor();await missing.getByRole('button',{name:'查看入库图像 FINGER-U005-RT-1',exact:true}).click();await imageDialog.waitFor();await imageDialog.getByText('图像不可用',{exact:true}).waitFor();assert.match(await imageDialog.innerText(),/FINGER-U005-RT-1/);await closeImage();await close()
+ pass('U004 missing modality is unenrolled; U005 same-finger records switch distinct bound images and unavailable image keeps its metadata')
+ await page.route('**/face-U004-1.svg',route=>route.fulfill({status:200,contentType:'image/svg+xml',body:'invalid image'}))
+ await open('U004');await drawer.getByText('图像不可用',{exact:true}).waitFor();assert.match(await drawer.innerText(),/FACE-U004-1/);await close();await page.unroute('**/face-U004-1.svg')
+ pass('image loading failures use the unavailable state while retaining the enrollment record')
+ await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;api.getApplicant=async id=>{const r=await window.originalApplicantDetail(id);if(id==='U005')r.records[0].fingerPosition=null;return r}})
+ await open('U005');await drawer.getByRole('heading',{name:'指位未标注',exact:true}).waitFor();await close();await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getApplicant=window.originalApplicantDetail})
+ pass('a valid record without a finger position is explicitly grouped as unmarked')
+ for(const[label,expected]of[['仅人脸',['U004','U006','U010','U201','U202','U203']],['仅指纹',['U005','U007','U009','U101','U102','U103']],['人脸和指纹均已入库',['U001']]]){
+  await page.locator('.applicant-filters .el-select').click();await page.getByRole('option',{name:label,exact:true}).click();await search();assert.deepEqual(await page.locator('.applicants-page .applicant-id').allTextContents(),expected)
+ }
+ await reset()
+ const filtering=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;const p=await api.getApplicant('U001');return{boundary:(await api.listApplicants({userId:'U001',startTime:p.enrolledAt,endTime:p.enrolledAt})).total,partial:(await api.listApplicants({userId:'U00'})).total,mismatch:(await api.listApplicants({userId:'U001',modality:'face'})).total,ascending:(await api.listApplicants({sortBy:'updatedAt',sortOrder:'ascending'})).items,descending:(await api.listApplicants({sortBy:'enrolledAt',sortOrder:'descending'})).items}})
+ assert.equal(filtering.boundary,1);assert.equal(filtering.partial,0);assert.equal(filtering.mismatch,0);assert.equal(filtering.descending[0].userId,'U001');assert.equal(filtering.ascending.at(-1).userId,'U001')
+ pass('only-face/only-finger/both filters are exclusive, IDs are exact, time bounds are inclusive, and both time fields sort globally')
+ await page.setViewportSize({width:390,height:600})
+ await page.locator('.applicants-page th').filter({hasText:'最近更新时间'}).locator('.sort-caret.descending').click();await loaded()
+ await page.locator('.applicant-pagination .el-select').click();await page.getByRole('option',{name:'2条/页',exact:true}).click();await loaded();await page.locator('.el-pager .number').filter({hasText:/^2$/}).click();await loaded()
+ await page.locator('.applicants-page .el-table__row').first().getByRole('button',{name:'查看日志',exact:true}).scrollIntoViewIfNeeded()
+ const context=await page.evaluate(()=>({y:scrollY,x:document.querySelector('.applicants-page .el-scrollbar__wrap').scrollLeft,ids:[...document.querySelectorAll('.applicants-page .applicant-id')].map(n=>n.textContent)}))
+ assert.ok(context.y>0&&context.x>0,'context restore must exercise real vertical and horizontal scrolling')
+ const person=context.ids[0];await page.locator('.applicants-page .el-table__row').first().getByRole('button',{name:'查看日志',exact:true}).click();await page.waitForURL(u=>u.pathname==='/logs'&&u.searchParams.get('userId')===person);await loaded()
+ await page.getByPlaceholder('输入完整业务请求 ID').fill('no-match');await button('查询').click();await loaded();await page.goBack();await page.waitForURL('**/applicants');await loaded()
+ await page.waitForFunction(expected=>Math.abs(scrollY-expected)<2,context.y)
+ assert.equal((await page.locator('.el-pager .is-active').innerText()).trim(),'2');assert.deepEqual(await page.locator('.applicants-page .applicant-id').allTextContents(),context.ids)
+ assert.equal(await page.locator('.applicants-page .el-scrollbar__wrap').evaluate(el=>el.scrollLeft),context.x)
+ await page.locator('.applicants-page .el-table__row').first().getByRole('button',{name:'查看日志',exact:true}).click();await page.waitForURL('**/logs?*');await loaded();assert.equal(await page.getByPlaceholder('输入完整业务请求 ID').inputValue(),'')
+ await page.goBack();await page.waitForURL('**/applicants');await loaded();await reset()
+ await page.setViewportSize({width:1366,height:1000})
+ pass('return from logs restores sort/page/nonzero scroll and a fresh person-level log jump clears previous request filters')
+ await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;api.listApplicants=async()=>{throw new Error('模拟人员查询失败')}});await search();await page.getByText('查询失败，请重试',{exact:true}).waitFor();assert.equal(await page.locator('.applicants-page .el-table__row').count(),0)
+ await page.evaluate(async()=>{(await import('/src/api/index.js')).default.listApplicants=window.originalApplicantList});await search()
+ await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;api.getApplicant=async()=>{throw new Error('模拟详情读取失败')}});await open('U001');await drawer.getByText('模拟详情读取失败',{exact:true}).waitFor()
+ await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getApplicant=window.originalApplicantDetail});await drawer.getByRole('button',{name:'重新读取',exact:true}).click();await loaded();assert.equal(await drawer.locator('img').count(),11);await close()
+ pass('list failures clear stale rows and detail failures support explicit recovery')
+ await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.pendingPeople=[];api.listApplicants=q=>new Promise((resolve,reject)=>window.pendingPeople.push({resolve,reject,q}))})
+ await button('查询').click();await button('查询').click();await page.evaluate(async()=>window.pendingPeople[1].resolve(await window.originalApplicantList({userId:'U006'})));await loaded();await page.evaluate(async()=>window.pendingPeople[0].resolve(await window.originalApplicantList({userId:'U001'})))
+ assert.deepEqual(await page.locator('.applicants-page .applicant-id').allTextContents(),['U006']);await page.evaluate(async()=>{(await import('/src/api/index.js')).default.listApplicants=window.originalApplicantList});await reset()
+ pass('older applicant list responses cannot overwrite the latest query result')
+ for(const width of[1920,1366,1024,768,390,320]){
+  await page.setViewportSize({width,height:width<768?844:1000});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`list overflow ${width}`)
+  await open('U001');assert.ok(await drawer.locator('.el-drawer__body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),`drawer overflow ${width}`)
+  await drawer.getByRole('button',{name:'查看入库图像 FACE-U001-1',exact:true}).click();await imageDialog.waitFor();const rect=await imageDialog.boundingBox();assert.ok(rect.x>=0&&rect.x+rect.width<=width+1)
+  if([1366,390].includes(width))await page.screenshot({path:`${out}/image-${width}.png`})
+  await closeImage();if([1366,390].includes(width))await page.screenshot({path:`${out}/detail-${width}.png`});await close()
+ }
+ pass('list, finger groups and image details fit 320–1920px and retain reachable close controls')
+ await page.setViewportSize({width:1366,height:1000});await button('账户菜单').click();await page.getByRole('menuitem',{name:'退出登录',exact:true}).click();await page.locator('.el-message-box').getByRole('button',{name:'确定',exact:true}).click();await page.waitForURL('**/login');await login('ops.zhang','ops123');await go('/applicants')
+ assert.equal(await page.locator('.applicants-page .el-table__row').count(),13);assert.equal(await button('新建账户').count(),0)
+ pass('operator retains applicant and enrollment-image read access without account-management controls')
+ assert.deepEqual(errors,[]);assert.deepEqual(backendRequests,[]);pass('zero browser errors and zero real-backend requests')
+ await fs.writeFile(`${out}/report.json`,JSON.stringify({checks,errors,backendRequests},null,2));console.log(`COMPLETE ${checks.length} checks`)
+}catch(e){await page.screenshot({path:`${out}/failure.png`});console.error(e);process.exitCode=1}finally{await browser.close()}

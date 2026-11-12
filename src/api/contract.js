@@ -32,6 +32,19 @@
  * @property {number} fingerCount 当前指纹记录数
  * @property {string} enrolledAt 首次入库时间
  * @property {string} updatedAt 最近更新时间
+ * @property {EnrollmentRecord[]} [records] 详情和列表统计使用相同的当前有效记录
+ */
+
+/**
+ * @typedef {Object} EnrollmentRecord
+ * @property {string} userId 完整业务对象 ID
+ * @property {string} recordId 当前有效入库记录 ID
+ * @property {'face'|'finger'} feature
+ * @property {string|null} [fingerPosition] 指位枚举；缺失显示指位未标注
+ * @property {string} enrolledAt ABIS 确认注册成功的时间
+ * @property {string} updatedAt 最近成功改变此记录的时间
+ * @property {string|null} imageUrl 每条记录绑定的本地样例图像；缺失/加载失败不删除记录
+ * @property {string|null} requestId 可明确关联的入库请求，预置记录可为空
  */
 
 /**
@@ -39,7 +52,9 @@
  * @property {number} [page=1]
  * @property {number} [pageSize=20]
  * @property {string} [userId] 去除首尾空白后精确匹配
- * @property {''|'face'|'finger'|'both'} [modality] face/finger 表示包含此模态，both 表示同时包含两种
+ * @property {''|'face'|'finger'|'both'} [modality] face/finger 表示仅此模态，both 表示同时包含两种
+ * @property {'enrolledAt'|'updatedAt'} [sortBy] 全量过滤后排序，再分页
+ * @property {'ascending'|'descending'} [sortOrder]
  * @property {string} [startTime] 首次入库时间下界，YYYY-MM-DD HH:mm:ss，包含边界
  * @property {string} [endTime] 首次入库时间上界，包含边界
  */
@@ -56,10 +71,7 @@
  * @typedef {Object} MonitorItem
  * @property {string} key
  * @property {string} name
- * @property {string} layer
- * @property {'normal'|'abnormal'|'unreachable'|'not_deployed'} status
- * @property {Array<{id: string, status: string}>} instances
- * @property {boolean} optional
+ * @property {Array<{id: string, name?: string, status: 'normal'|'abnormal'|'unknown'}>} instances 按实例统计，未知仍计入总数
  * @property {MonitorMetrics} [metrics]  可选原始指标，当前监控界面不展示授权或底库信息
  *
  * ⚠ metrics **不保证存在**：非算法服务对象上它可能是缺失的键，
@@ -117,7 +129,8 @@
  * @property {string} description
  * @property {string} [attemptId] 调用尝试标识
  * @property {string} [executionId] 业务处理开始与结束配对标识
- * @property {{userId:string|null,api:string}} [payload] 接收 Event 的入口字段；不同入口分别保留
+ * @property {{userId:string|null,api:string,feature?:'face'|'finger',fingerPosition?:string|null}} [payload] 接收 Event 的入口字段；不同入口分别保留
+ * @property {Object|null} [requestBody] 对应调用尝试实际记录的 ABIS 请求正文，缺失时不从入口字段推断
  * @property {Object|null} [responseBody] 此次 ABIS 发送响应 Event 的正文，不回退到其他请求或其他尝试
  */
 
@@ -184,7 +197,8 @@
  * @property {(payload: {oldPassword: string, newPassword: string}) => Promise<void>} changePassword 本人改密；身份来自当前会话，不接受目标账户 ID
  * @property {(params?: PageParams & {keyword?: string}) => Promise<{total: number, items: Account[]}>} listAccounts
  * @property {(params?: ApplicantQueryParams) => Promise<{total: number, items: Applicant[]}>} listApplicants 当前库内按 userId 去重的人员，不能从调用日志推算
- * @property {(userId: string) => Promise<Applicant & {records: Array<{recordId: string, feature: 'face'|'finger', enrolledAt: string, updatedAt: string}>}>} getApplicant
+ * @property {(userId: string) => Promise<Applicant & {records: EnrollmentRecord[]}>} getApplicant
+ * @property {(query: {userId: string, feature: 'face'|'finger', fingerPosition?: string|null}) => Promise<{userId: string, feature: string, fingerPosition: string|null, status: 'available'|'missing'|'deleted', recordId: string|null, imageUrl: string|null}>} getUserImage 按当前有效入库记录查询图像；仅明确删除时返回 deleted，临时读取失败抛错。真实 GUI 后端取图接口待对接。
  * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator', phone?: string, email?: string, remark?: string}) => Promise<Account & {initialPassword?: string}>} createAccount
  * @property {(id: number, payload: Partial<Account>) => Promise<Account>} updateAccount
  * @property {(id: number) => Promise<void>} deleteAccount
@@ -205,7 +219,7 @@
 export const API_METHODS = [
   'login', 'logout', 'getSession', 'changePassword',
   'listAccounts', 'createAccount', 'updateAccount', 'deleteAccount', 'resetPassword',
-  'listApplicants', 'getApplicant',
+  'listApplicants', 'getApplicant', 'getUserImage',
   'getThresholds', 'updateThresholds',
   'getHealth',
   'listLogs', 'listAudits',
