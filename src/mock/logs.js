@@ -60,8 +60,9 @@ function buildRequest(sample, index, base) {
     event('PUBLISH_CONFIRMED', 'MQ 已确认发布', 320, 'SUCCESS', { description: '响应未被退回，最终响应交付完成。' }),
   ])
   const record = {
-    id: index + 1, requestId, mode, scenario,
+    id: index + 1, requestId, mode, scenario, collectionRound: api === 'delete' ? 2 : 1,
     relatedRequestIds: ({ 0: ['REQ-00000003'], 1: ['REQ-00000004'], 4: ['REQ-00000006'] })[index] || [],
+    sourceIp: index === 7 ? null : mode === 'sync' ? '198.51.100.23' : `203.0.113.${40 + index % 4}`,
     caller: mode === 'async' ? 'MOSIP-Adapter' : 'SIGATT-Portal', feature,
     result: 'success', publication: mode === 'sync' ? 'sync' : 'published', publishedAt: mode === 'sync' ? null : at(320),
     collectionDelayed: false, stages: mode === 'sync' ? [handling] : [received, calling, published],

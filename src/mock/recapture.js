@@ -8,7 +8,7 @@ export function buildRecaptureLogs({ fingerFailure = false, base = Date.parse('2
     const source = templates[api === 'delete' ? 6 : api === 'identification' ? 2 : feature === 'face' ? 0 : 1]
     const record = structuredClone(source), delta = base + index * 60000 - Date.parse(source.receivedAt)
     const at = value => value ? new Date(Date.parse(value) + delta).toISOString() : value
-    record.requestId = `RECAP-${String(index + 1).padStart(3, '0')}`; record.id = templates.length + index + 1; record.feature = feature; record.relatedRequestIds = []
+    record.requestId = `RECAP-${String(index + 1).padStart(3, '0')}`; record.id = templates.length + index + 1; record.feature = feature; record.collectionRound = index < 3 ? 1 : 2; record.relatedRequestIds = []
     function move(stage) {
       stage.instanceId = `${record.requestId}-${stage.instanceId}`; stage.startedAt = at(stage.startedAt); stage.endedAt = at(stage.endedAt)
       stage.events.forEach(e => { e.id = `${record.requestId}-${e.id}`; e.requestId = record.requestId; e.at = at(e.at)
@@ -20,11 +20,11 @@ export function buildRecaptureLogs({ fingerFailure = false, base = Date.parse('2
     record.stages.forEach(move); record.publishedAt = at(record.publishedAt)
     if (api === 'enrollment') {
       record.enrollmentRecords = (feature === 'face' ? [null] : FINGER_POSITIONS.slice(0, index === 7 ? 9 : 10).map(p => p.key)).map((fingerPosition, i) => ({
-        recordId: `${record.requestId}-${feature}-${i + 1}`, fingerPosition,
+        recordId: `${record.requestId}-${feature}-${i + 1}`, fingerPosition, qualityScore: feature === 'face' ? 91 : i === 8 ? null : 93 - i * 2,
         imageUrl: feature === 'face' ? `/mock/biometrics/face-${index === 0 ? 'U001' : 'U004'}-1.svg` : `/mock/biometrics/finger-U001-${i + 1}.svg`,
       }))
     }
-    if (index === 7 && !fingerFailure) record.enrollmentRecords.push({ ...record.enrollmentRecords[1], recordId: `${record.requestId}-finger-duplicate`, imageUrl: '/mock/biometrics/finger-U005-left-index-b.svg' })
+    if (index === 7 && !fingerFailure) record.enrollmentRecords.push({ ...record.enrollmentRecords[1], recordId: `${record.requestId}-finger-duplicate`, qualityScore: 97, imageUrl: '/mock/biometrics/finger-U005-left-index-b.svg' })
     if (api === 'enrollment') record.stages[1].events.find(e => e.kind === 'CALL_STARTED').requestBody.images = record.enrollmentRecords.map(r => ({ imageId: r.recordId, fingerPosition: r.fingerPosition }))
     if (index === 7 && fingerFailure) {
       record.result = 'failure'; const handling = record.stages[1].children[0]; handling.status = 'FAILED'
@@ -83,13 +83,13 @@ export function buildDocumentRecaptureLogs(phase = 'complete') {
       record.stages.forEach(move)
       if (record.api === 'enrollment') {
         const isOld = index < 2
-        const positions = record.feature === 'face' ? [null] : FINGER_POSITIONS.slice(0, isOld ? sample.fingers : sample.userId === 'U301' ? 9 : 10).map(position => position.key)
+        const positions = record.feature === 'face' ? [null] : FINGER_POSITIONS.slice(0, isOld ? sample.fingers : sample.userId === 'U301' ? 8 : 10).map(position => position.key)
         record.enrollmentRecords = positions.map((fingerPosition, imageIndex) => ({
-          recordId: `${requestId}-${record.feature}-${imageIndex + 1}`, fingerPosition,
+          recordId: `${requestId}-${record.feature}-${imageIndex + 1}`, fingerPosition, qualityScore: record.feature === 'face' ? 91 : imageIndex === 8 ? null : imageIndex === 9 ? 0 : 94 - imageIndex * 3,
           imageUrl: `/mock/biometrics/${record.feature === 'face' ? `face-${isOld ? 'U001' : sample.face}-1.svg` : isOld ? `finger-U001-${imageIndex + 1}.svg` : newFingerImages[imageIndex % newFingerImages.length]}`,
         }))
         if (!isOld && record.feature === 'finger' && sample.userId === 'U301') {
-          record.enrollmentRecords.push({ ...record.enrollmentRecords[1], recordId: `${requestId}-finger-duplicate`, imageUrl: '/mock/biometrics/finger-U005-left-index-b.svg' })
+          record.enrollmentRecords.push({ ...record.enrollmentRecords[1], recordId: `${requestId}-finger-duplicate`, qualityScore: 97, imageUrl: '/mock/biometrics/finger-U005-left-index-b.svg' })
         }
         record.stages[1].events.find(event => event.kind === 'CALL_STARTED').requestBody.images = record.enrollmentRecords.map(image => ({ imageId: image.recordId, fingerPosition: image.fingerPosition }))
       }

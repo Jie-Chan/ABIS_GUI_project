@@ -14,23 +14,23 @@ const refresh=async()=>{await button('立即刷新').click();await loaded()}
 try{
  await page.goto(`${base}/login`);await page.locator('.login-content input').nth(0).fill('admin');await page.locator('.login-content input').nth(1).fill('admin123');await button('登录').click();await page.waitForURL('**/monitor');await loaded()
  assert.deepEqual(await counts(),['10','8','1','1'])
- assert.deepEqual(await page.locator('.service-card h3').allTextContents(),['ABIS-System','算法服务 1','算法服务 2','PostgreSQL','MinIO'])
+ assert.deepEqual(await page.locator('.service-card h3').allTextContents(),['ABIS-System','算法服务 1','算法服务 2'])
  assert.deepEqual(await page.locator('.instance-id').allTextContents(),['system-1','system-2','face-1','fingerprint-1','face-2','fingerprint-2','postgresql-1','postgresql-2','postgresql-3','minio-1'])
  assert.equal(await page.locator('.instance-row').count(),10);assert.doesNotMatch(await page.locator('.monitor-page').innerText(),/Gateway/)
- pass('five expanded groups contain exactly the ten deployed instances, including both algorithm pairs and no Gateway')
+ assert.equal(await page.locator('.storage-row').count(),4);assert.deepEqual(await page.locator('.storage-table th').allTextContents(),['组件','实例','主机 / IP','状态']);pass('three service cards and four storage rows contain exactly ten deployed instances and no Gateway')
  for(const [label,count,id]of[['正常',8],['异常',1,'face-1'],['未知',1,'minio-1'],['全部',10]]){
   await button(label).click();assert.equal(await page.locator('.instance-row').count(),count);assert.equal(await button(label).getAttribute('aria-pressed'),'true');assert.deepEqual(await counts(),['10','8','1','1'])
   if(id)assert.deepEqual(await page.locator('.instance-id').allTextContents(),[id])
  }
  pass('all four clickable summary filters show 10/8/1/1 matching rows and hide unmatched groups without changing totals')
- await button('未知').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('.service-card').count(),1);await refresh();assert.deepEqual(await page.locator('.instance-id').allTextContents(),['minio-1'])
+ await button('未知').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('.service-card').count(),0);assert.equal(await page.locator('.storage-row').count(),1);await refresh();assert.deepEqual(await page.locator('.instance-id').allTextContents(),['minio-1'])
  await button('全部').click()
  pass('keyboard filtering and manual refresh retain the selected instance filter')
  assert.match(await page.locator('.refresh-area .meta').innerText(),/^状态更新于 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
  assert.doesNotMatch(await page.locator('.monitor-page').innerText(),/每.*秒|自动刷新|倒计时|HTTP|接口调用|刷新频率/)
  const layout=await page.locator('.service-card').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return{x:r.x,y:r.y}}))
- assert.equal(layout[0].y,layout[2].y);assert.equal(layout[3].y,layout[4].y);assert.ok(layout[3].y>layout[0].y)
- pass('desktop layout has three cards above two, success timestamp only and no frequency/countdown or transport details')
+ assert.equal(layout[0].y,layout[2].y);assert.ok((await page.locator('.storage-section').boundingBox()).y>layout[0].y)
+ pass('desktop layout has three service cards above one storage table, success timestamp only and no frequency/countdown or transport details')
  await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.originalHealth=api.getHealth})
  const timestamp=await page.locator('.meta').innerText()
  await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getHealth=async()=>{throw new Error('模拟读取失败')}});await refresh()
@@ -46,7 +46,7 @@ try{
  for(const width of[1920,1366,1100,1024,768,640,390,320]){
   await page.setViewportSize({width,height:1000});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`page overflow ${width}`)
-  for(const row of await page.locator('.instance-row').all())assert.ok(await row.evaluate(el=>{const label=el.querySelector('.instance-identity').getBoundingClientRect(),state=el.querySelector('.instance-state').getBoundingClientRect();return label.right<=state.left&&el.scrollWidth<=el.clientWidth+1}))
+  for(const row of await page.locator('.instance-row').all())assert.ok(await row.evaluate(el=>{const label=el.querySelector('.instance-identity').getBoundingClientRect(),state=el.querySelector('.instance-state').getBoundingClientRect();return label.right<=state.left+1&&el.scrollWidth<=el.clientWidth+1}))
   if([1366,390].includes(width))await page.screenshot({path:`${out}/monitor-${width}.png`,fullPage:true})
  }
  pass('instance names and right-aligned states fit 320–1920px with no overlap or clipping')

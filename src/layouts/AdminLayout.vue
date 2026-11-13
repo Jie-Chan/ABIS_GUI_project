@@ -40,10 +40,11 @@ const displayName = computed(() => auth.account?.displayName || auth.account?.us
 
 const headerRef = ref(null)
 const messageOffset = ref(88)
+const headerHeight = ref(72)
 let headerObserver
 onMounted(() => {
   const header = headerRef.value.$el
-  const updateOffset = () => { messageOffset.value = Math.ceil(header.getBoundingClientRect().height) + 16 }
+  const updateOffset = () => { headerHeight.value = Math.ceil(header.getBoundingClientRect().height); messageOffset.value = headerHeight.value + 16 }
   updateOffset()
   headerObserver = new ResizeObserver(updateOffset)
   headerObserver.observe(header)
@@ -64,7 +65,7 @@ async function handleLogout() {
 
 <template>
   <el-config-provider :message="{ offset: messageOffset }">
-  <el-container class="abis-shell console-layout">
+  <el-container class="abis-shell console-layout" :style="{ '--abis-nav-height': `${headerHeight}px` }">
     <el-header ref="headerRef" class="header">
       <div class="brand" :aria-label="title">
         <BrandMark /><strong>ABIS</strong><span>{{ title.replace(/^ABIS\s*/, '') }}</span>
@@ -148,7 +149,7 @@ async function handleLogout() {
 .avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; }
 .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #acbdd4; }
-.workspace-main { width: 100%; min-width: 0; padding: 32px 48px 48px; overflow: visible; }
+.workspace-main { --abis-workspace-top: 32px; width: 100%; min-width: 0; padding: 32px 48px 48px; overflow: visible; }
 .breadcrumb { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 12px; }
 .breadcrumb > span { color: #7c8ba1; }
 .breadcrumb b { color: #b6c1d0; font-weight: 400; }
@@ -165,13 +166,13 @@ async function handleLogout() {
   .primary-navigation :deep(.settings-chevron) { display: inline-block; }
   .user { gap: 10px; }
   .user-role { display: none; }
-  .workspace-main { padding: 28px; }
+  .workspace-main { --abis-workspace-top: 28px; padding: 28px; }
 }
 @media (max-width: 1200px) {
   .header { display: flex; height: auto; min-height: 72px; flex-wrap: wrap; gap: 0 20px; padding: 16px 24px 0; }
   .user { margin-left: auto; }
-  .primary-navigation { order: 3; flex-basis: 100%; justify-content: safe center; margin-top: 12px; overflow-x: auto; }
-  .primary-navigation :deep(.el-menu) { flex-shrink: 0; height: 48px; --el-menu-horizontal-height: 48px; }
+  .primary-navigation { order: 3; flex-basis: 100%; justify-content: safe center; margin-top: 12px; min-height: 52px; align-items: center; overflow-x: auto; overflow-y: hidden; }
+  .primary-navigation :deep(.el-menu) { flex-shrink: 0; height: 48px; overflow: visible; --el-menu-horizontal-height: 48px; }
   .primary-navigation :deep(.el-dropdown) { flex-shrink: 0; }
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding: 0 18px; }
   .settings-trigger { height: 48px; }
@@ -188,7 +189,7 @@ async function handleLogout() {
   .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 12px; padding-right: 12px; gap: 6px; font-size: 14px; }
   .primary-navigation :deep(.ui-icon) { display: none; }
   .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }
-  .workspace-main { padding: 22px 16px; }
+  .workspace-main { --abis-workspace-top: 22px; padding: 22px 16px; }
   .page-intro h1 { font-size: 23px; }
   .page-intro p { font-size: 12px; }
   .page-intro { gap: 12px; margin-bottom: 20px; }

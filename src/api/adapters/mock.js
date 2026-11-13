@@ -215,8 +215,9 @@ export default {
     else {
       const documentScenario = scenario.startsWith('document-')
       const extra = documentScenario ? buildDocumentRecaptureLogs(scenario.slice(9)) : buildRecaptureLogs({ fingerFailure: scenario === 'failed' }).slice(0, ({original:3,deleted:5,face:6,complete:9,failed:9})[scenario])
-      logs = [...defaultBusiness.logs, ...extra]
-      subjects = [...defaultBusiness.subjects, ...buildEnrollmentSubjects(extra).filter(person => (documentScenario ? ['U301', 'U302', 'U303'] : ['U900']).includes(person.userId))]
+      const sampleIds = documentScenario ? ['U301', 'U302', 'U303'] : ['U900']
+      logs = [...defaultBusiness.logs.filter(log => !sampleIds.includes(log.userId)), ...extra]
+      subjects = [...defaultBusiness.subjects.filter(person => !sampleIds.includes(person.userId)), ...buildEnrollmentSubjects(extra).filter(person => sampleIds.includes(person.userId))]
       applicants = subjects.filter(person => person.faceCount > 0)
     }
     return { scenario, userId: scenario.startsWith('document-') ? '' : 'U900' }
@@ -235,9 +236,9 @@ export default {
       return true
     })
     if (['enrolledAt', 'updatedAt'].includes(sortBy) && ['ascending', 'descending'].includes(sortOrder)) {
-      filtered.sort((a, b) => (Date.parse(a[sortBy]) - Date.parse(b[sortBy])) * (sortOrder === 'ascending' ? 1 : -1) || a.userId.localeCompare(b.userId))
+      filtered.sort((a, b) => ((Date.parse(a[sortBy]) || 0) - (Date.parse(b[sortBy]) || 0)) * (sortOrder === 'ascending' ? 1 : -1) || a.userId.localeCompare(b.userId))
     }
-    return paginate(filtered.map(({ records, changes, ...person }) => ({ ...person })), { page, pageSize })
+    return paginate(filtered.map(({ records, changes, ...person }) => ({ ...person, records: records.map(record => ({ ...record })) })), { page, pageSize })
   },
 
   async getApplicant(userId) {
@@ -282,10 +283,10 @@ export default {
     const now = Date.now()
     const rows = filterLogs(logs, params).map(row => {
       const duration = requestDuration(row, now)
-      return { ...row, durationLabel: duration.label, durationText: duration.text }
+      return { ...row, sourceIp: row.sourceIp || '—', durationLabel: duration.label, durationText: duration.text }
     })
     return toCsvBlob(rows, [
-      ['calledAt', '接收时间'], ['requestId', '请求 ID'], ['userId', '用户 ID'],
+      ['calledAt', '接收时间'], ['sourceIp', '请求来源 IP'], ['requestId', '请求 ID'], ['userId', '用户 ID'],
       ['caller', '调用方标识'], ['api', '接口类型'], ['mode', '链路', { sync: '同步', async: '异步' }],
       // feature / result 在记录里存的是枚举 key（'face' / 'success'），
       // 直接落表会在中文表头下写出英文枚举值。用常量里的 key→label 快查表转中文，
@@ -321,6 +322,7 @@ function filterLogs(list, { startTime, endTime, userId = '', requestId = '', req
   const applicant = userId.trim()
   const request = requestId.trim()
   return list.map(projectRequest).filter((r) => {
+    if (r.historical && !applicant && !request && !requestIds.length) return false
     if (applicant && r.userId !== applicant) return false
     if (request && r.requestId !== request) return false
     if (requestIds.length && !requestIds.includes(r.requestId)) return false

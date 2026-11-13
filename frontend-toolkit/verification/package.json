@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node review-ui.mjs && node review-profile.mjs && node review-monitor.mjs && node review-sync.mjs && node review-log-ids.mjs && node review-applicants.mjs && node review-request-logs.mjs && node review-log-images.mjs && node review-log-layout.mjs && node review-four-pages.mjs && node review-drawer-recapture.mjs"
+    "test": "node review-ui.mjs && node review-profile.mjs && node review-monitor.mjs && node review-sync.mjs && node review-log-ids.mjs && node review-applicants.mjs && node review-request-logs.mjs && node review-log-images.mjs && node review-log-layout.mjs && node review-four-pages.mjs && node review-drawer-recapture.mjs && node review-20261113.mjs && node review-applicant-thumbnails.mjs && node review-sticky-defaults.mjs && node review-fixed-query-details.mjs"
   },
   "devDependencies": {
     "playwright": "1.64.1"

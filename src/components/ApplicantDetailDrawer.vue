@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { FINGER_POSITIONS, fingerLabel } from '@/constants/applicant'
 import { formatLogTime } from '@/utils/log'
+import { latestEnrollmentRecord } from '@/utils/applicant'
 import EnrollmentImage from '@/components/EnrollmentImage.vue'
 const visible = defineModel({ type: Boolean, default: false })
 const props = defineProps({ detail: { type: Object, default: null }, loading: Boolean, error: { type: String, default: '' } })
@@ -16,7 +17,7 @@ const fingerCount = computed(() => new Set(fingerRecords.value.filter(record => 
 const unmarked = computed(() => fingerRecords.value.filter(record => !FINGER_POSITIONS.some(position => position.key === record.fingerPosition)))
 const fingerSlots = computed(() => FINGER_POSITIONS.map(position => ({ ...position, records: fingerRecords.value.filter(record => record.fingerPosition === position.key) })))
 watch([visible, () => props.detail], () => { selected.value = {}; imageVisible.value = false; imageRecord.value = null })
-function chosen(slot) { return slot.records.find(record => record.recordId === selected.value[slot.key]) || slot.records[0] }
+function chosen(slot) { return slot.records.find(record => record.recordId === selected.value[slot.key]) || latestEnrollmentRecord(slot.records) }
 function openImage(record) { imageRecord.value = record; imageVisible.value = true }
 </script>
 <template>
@@ -26,8 +27,8 @@ function openImage(record) { imageRecord.value = record; imageVisible.value = tr
       <template v-else-if="detail">
         <el-descriptions :column="3" border class="applicant-summary">
           <el-descriptions-item label="申请人 ID"><span class="applicant-id">{{ detail.userId }}</span></el-descriptions-item>
-          <el-descriptions-item label="首次入库时间">{{ detail.enrolledAt }}</el-descriptions-item>
-          <el-descriptions-item label="最近入库变更时间">{{ detail.updatedAt }}</el-descriptions-item>
+          <el-descriptions-item label="首次注册">{{ detail.enrolledAt }}</el-descriptions-item>
+          <el-descriptions-item label="更新时间">{{ detail.updatedAt || '—' }}</el-descriptions-item>
         </el-descriptions>
         <el-tabs v-model="activeTab" class="applicant-detail-tabs">
           <el-tab-pane label="当前入库图像" name="images">
@@ -43,9 +44,9 @@ function openImage(record) { imageRecord.value = record; imageVisible.value = tr
         <section class="biometric-group" data-modality="finger">
           <h2>指纹 <span>{{ fingerCount }} 指 · {{ fingerRecords.length }} 条记录</span></h2>
           <p v-if="!fingerRecords.length" class="not-enrolled">未入库</p>
-            <div v-for="hand in ['左手', '右手']" :key="hand" class="hand-group"><h3>{{ hand }}</h3>
+            <div v-for="hand in ['左手', '右手'].filter(hand => fingerSlots.some(slot => slot.hand === hand && slot.records.length))" :key="hand" class="hand-group"><h3>{{ hand }}</h3>
               <div class="finger-grid">
-                <article v-for="slot in fingerSlots.filter(item => item.hand === hand)" :key="slot.key" class="finger-slot" :data-finger="slot.key">
+                <article v-for="slot in fingerSlots.filter(item => item.hand === hand && item.records.length)" :key="slot.key" class="finger-slot" :data-finger="slot.key">
                   <h4>{{ slot.label }} <span v-if="slot.records.length > 1">{{ slot.records.length }} 条</span></h4>
                   <template v-if="slot.records.length">
                     <el-select v-if="slot.records.length > 1" :model-value="chosen(slot).recordId" :aria-label="`${slot.label}入库记录`" @change="id => selected[slot.key] = id">
@@ -83,6 +84,7 @@ function openImage(record) { imageRecord.value = record; imageVisible.value = tr
       <EnrollmentImage :record="imageRecord" large />
       <el-descriptions :column="1" border class="image-metadata">
         <el-descriptions-item label="申请人 ID">{{ imageRecord.userId }}</el-descriptions-item>
+        <el-descriptions-item label="质量分">{{ Number.isFinite(imageRecord.qualityScore) ? imageRecord.qualityScore : '—' }}</el-descriptions-item>
         <el-descriptions-item label="记录 ID">{{ imageRecord.recordId }}</el-descriptions-item>
         <el-descriptions-item label="更新时间">{{ formatLogTime(imageRecord.updatedAt) }}</el-descriptions-item>
         <el-descriptions-item v-if="imageRecord.feature === 'finger'" label="指位">{{ fingerLabel(imageRecord.fingerPosition) }}</el-descriptions-item>

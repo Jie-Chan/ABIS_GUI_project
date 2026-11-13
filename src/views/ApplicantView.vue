@@ -1,9 +1,11 @@
 <script setup>
+import QueryPanel from '@/components/QueryPanel.vue'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import api from '@/api'
 import UiIcon from '@/components/UiIcon.vue'
+import ApplicantListImages from '@/components/ApplicantListImages.vue'
 import ApplicantDetailDrawer from '@/components/ApplicantDetailDrawer.vue'
 import { TIME_RANGE_SHORTCUTS } from '@/constants/timeRanges'
 import { emptyApplicantQuery, useApplicantListStore } from '@/stores/applicants'
@@ -65,10 +67,13 @@ async function openDetail(userId, restoring = false) {
   finally { if (sequence === detailSequence) detailLoading.value = false }
 }
 function closeDetail() { listStore.detailContext.restore = false; ++detailSequence; detail.value = null; detailError.value = ''; detailLoading.value = false }
-function viewChangeLogs(change) { return router.push({ name: 'logs', query: { userId: change.userId, requestIds: change.requestIds } }) }
-function restoreDetailPosition() {
+function viewChangeLogs(change) { return router.push({ name: 'logs', query: { userId: change.userId, requestId: change.requestId, returnTo: 'applicants' } }) }
+async function restoreDetailPosition() {
   const context = listStore.detailContext
-  if (context.restore) document.querySelector('.applicant-drawer .el-drawer__body')?.scrollTo(0, context.scroll)
+  if (!context.restore) return
+  await nextTick()
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  if (drawerVisible.value && detail.value && listStore.detailContext === context) document.querySelector('.applicant-drawer .el-drawer__body')?.scrollTo(0, context.scroll)
 }
 onBeforeRouteLeave(() => {
   if (drawerVisible.value) listStore.detailContext = { ...listStore.detailContext, userId: selectedUserId.value,
@@ -94,24 +99,28 @@ onBeforeUnmount(() => { ++listSequence; ++detailSequence })
 <template>
   <div class="records-page applicants-page">
     <el-card>
+      <QueryPanel>
       <el-alert v-if="error" :title="error" type="error" :closable="false" class="query-error" />
-      <el-form :inline="true" class="applicant-filters" @submit.prevent="search">
+      <el-form :inline="true" class="applicant-filters query-filters" @submit.prevent="search">
         <el-form-item label="申请人 ID" class="applicant-id-filter"><el-input v-model.trim="query.userId" clearable placeholder="输入完整申请人 ID" @keyup.enter="search"><template #prefix><UiIcon name="search" :size="16" /></template></el-input></el-form-item>
-        <el-form-item label="首次入库时间" class="enrollment-range"><el-date-picker v-model="timeRange" type="datetimerange" value-format="YYYY-MM-DD HH:mm:ss" :shortcuts="TIME_RANGE_SHORTCUTS" start-placeholder="开始时间" end-placeholder="结束时间" /></el-form-item>
+        <el-form-item label="首次注册" class="enrollment-range"><el-date-picker popper-class="query-date-popper" v-model="timeRange" type="datetimerange" value-format="YYYY-MM-DD HH:mm:ss" :shortcuts="TIME_RANGE_SHORTCUTS" start-placeholder="开始时间" end-placeholder="结束时间" /></el-form-item>
         <el-form-item class="query-actions"><el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button><el-button @click="reset">重置</el-button></el-form-item>
       </el-form>
+      </QueryPanel>
       <div class="results-toolbar"><span class="record-count" aria-live="polite">共 {{ total }} 位申请人</span><span class="population-note">仅展示已确认注册成功且当前有效的申请人</span><el-button v-if="isMock" link type="primary" @click="scenarioVisible = !scenarioVisible">重采样例</el-button></div>
       <section v-if="isMock && scenarioVisible" class="recapture-demo" aria-label="整人重采 Mock 样例">
-        <p><strong>整人重采 Mock 样例 · U900</strong> <span>可依次切换验收状态；恢复默认数据后仍为原 15 条日志。</span></p>
+        <p><strong>整人重采 Mock 样例 · U900</strong> <span>可依次切换验收状态；恢复默认数据后展示 U301、U302 重采结果及原 15 条默认日志。</span></p>
         <div class="scenario-choices"><el-button v-for="item in scenarioOptions" :key="item.value" :type="scenario === item.value ? 'primary' : 'default'" :loading="scenarioLoading && scenario === item.value" :disabled="scenarioLoading" @click="changeScenario(item.value)">{{ item.label }}</el-button><el-button :disabled="scenarioLoading" @click="changeScenario('default')">恢复默认数据</el-button></div>
-        <p class="document-samples"><strong>开发文档样例 · U301 / U302 / U303</strong> <span>U301：9 指位、10 条记录；U302：8 指重采为 10 指；U303：新人脸成功、指纹失败。切换后可按申请人 ID 查看。</span></p>
+        <p class="document-samples"><strong>开发文档样例 · U301 / U302 / U303</strong> <span>U301：8 指位、9 条记录；U302：8 指重采为 10 指；U303：新人脸成功、指纹失败。切换后可按申请人 ID 查看。</span></p>
         <div class="scenario-choices"><el-button v-for="item in documentScenarios" :key="item.value" :type="scenario === item.value ? 'primary' : 'default'" :disabled="scenarioLoading" @click="changeScenario(item.value)">{{ item.label }}</el-button></div>
         <el-alert v-if="scenarioError" :title="scenarioError" type="error" :closable="false" />
       </section>
       <el-table ref="tableRef" :data="rows" row-key="userId" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配的申请人'" :default-sort="{ prop: query.sortBy, order: query.sortOrder }" border @sort-change="changeSort">
-        <el-table-column prop="userId" label="申请人 ID" min-width="150"><template #default="{ row }"><span class="applicant-id">{{ row.userId }}</span></template></el-table-column>
-        <el-table-column prop="enrolledAt" label="首次入库时间" min-width="205" sortable="custom" />
-        <el-table-column prop="updatedAt" label="最近入库变更时间" min-width="205" sortable="custom" />
+        <el-table-column prop="userId" label="申请人 ID" min-width="105"><template #default="{ row }"><span class="applicant-id">{{ row.userId }}</span></template></el-table-column>
+        <el-table-column label="人脸" width="80"><template #default="{ row }"><ApplicantListImages :records="row.records" feature="face" /></template></el-table-column>
+        <el-table-column label="指纹" min-width="360"><template #default="{ row }"><ApplicantListImages :records="row.records" feature="finger" /></template></el-table-column>
+        <el-table-column prop="enrolledAt" label="首次注册" min-width="190" sortable="custom" />
+        <el-table-column prop="updatedAt" label="更新时间" min-width="190" sortable="custom"><template #default="{ row }">{{ row.updatedAt || '—' }}</template></el-table-column>
         <el-table-column label="操作" width="120" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row.userId)">查看详情</el-button></template></el-table-column>
       </el-table>
       <el-pagination :current-page="query.page" :page-size="query.pageSize" :total="total" :page-sizes="[2, 5, 20, 50]" layout="total, sizes, prev, pager, next" class="applicant-pagination" @update:current-page="changePage" @update:page-size="changePageSize" />

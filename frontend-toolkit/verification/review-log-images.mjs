@@ -18,7 +18,7 @@ const open=async n=>{await page.locator('.request-table .el-table__row').filter(
 const close=async()=>{await drawer.getByRole('button',{name:'关闭',exact:true}).click();await drawer.waitFor({state:'hidden'})}
 const showResponse=async()=>{await drawer.getByRole('tab',{name:'接口报文',exact:true}).click();const h=drawer.getByRole('button',{name:'响应结果',exact:true});if(await h.getAttribute('aria-expanded')==='false')await h.click()}
 const images=async()=>{await drawer.getByRole('tab',{name:'图像比对',exact:true}).click();await drawer.locator('.request-image-comparison').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('.comparison-frame')].every(el=>el.getAttribute('aria-busy')!=='true'))}
-const choose=async index=>{await drawer.getByRole('button',{name:new RegExp(`^候选 ${index+1} ·`)}).click();await page.waitForFunction(()=>[...document.querySelectorAll('.comparison-frame')].every(el=>el.getAttribute('aria-busy')!=='true'))}
+const choose=async index=>{await drawer.getByRole('button',{name:new RegExp(`^候选 ${index+1}$`)}).click();await page.waitForFunction(()=>[...document.querySelectorAll('.comparison-frame')].every(el=>el.getAttribute('aria-busy')!=='true'))}
 const state=el=>el.getAttribute('data-image-state')
 const shot=async name=>{await drawer.locator('.request-image-comparison').scrollIntoViewIfNeeded();await page.screenshot({path:`${out}/${name}.png`,animations:'disabled'})}
 const fixture=async(candidates,extra={})=>{
@@ -59,7 +59,7 @@ try{
  const lookup=await page.evaluate(async()=>{
   const api=(await import('/src/api/index.js')).default
   const keys=(await import('/src/api/contract.js')).default,http=(await import('/src/api/adapters/http.js')).default
-  return {parity:keys.every(k=>typeof api[k]==='function'&&typeof http[k]==='function'),items:await Promise.all([{userId:'U001',feature:'finger',fingerPosition:'right_index'},{userId:'U005',feature:'finger',fingerPosition:'right_thumb'},{userId:'U004',feature:'finger'},{userId:'U999',feature:'face'},{userId:'U002',feature:'face'},{userId:'000U001',feature:'face'}].map(q=>api.getUserImage(q)))}
+  return {parity:keys.every(k=>typeof api[k]==='function'&&typeof http[k]==='function'),items:await Promise.all([{userId:'U001',feature:'finger',fingerPosition:'right_index'},{userId:'U005',feature:'finger',fingerPosition:'right_thumb'},{userId:'U004',feature:'finger',fingerPosition:'right_little'},{userId:'U999',feature:'face'},{userId:'U002',feature:'face'},{userId:'000U001',feature:'face'}].map(q=>api.getUserImage(q)))}
  })
  assert.equal(lookup.parity,true);assert.match(lookup.items[0].imageUrl,/finger-U001-7/);assert.equal(lookup.items[0].fingerPosition,'right_index');assert.deepEqual(lookup.items.slice(1).map(x=>x.status),['missing','missing','missing','deleted','missing'])
  pass('current-record lookup strictly matches full IDs, modality and finger position, distinguishes deletion from missing data, and keeps adapter contracts aligned')

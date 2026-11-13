@@ -48,7 +48,7 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
           <tr><th>业务结果摘要</th><td colspan="3" data-testid="business-summary">{{ businessSummary }}</td></tr>
         </tbody>
       </table>
-      <div class="request-detail-region">
+      <div class="request-detail-region" :class="{ 'is-image-tab': activeTab === 'images' }">
         <el-alert v-if="record.collectionDelayed" title="日志可能尚未齐全" description="按已有证据展示状态；日志迟到不覆盖入口字段或已确认结果。" type="warning" :closable="false" show-icon />
       <div v-if="attempts.length > 1" class="response-choice"><label id="response-choice-label">ABIS 调用尝试</label>
         <el-select v-model="selectedAttemptId" aria-label="选择 ABIS 调用尝试" class="response-selector">
@@ -94,5 +94,17 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
 }
 @media(max-width:600px) {
   .request-summary colgroup { display: none; }.request-summary tr { display: grid; grid-template-columns: 100px minmax(0,1fr); }.request-summary th,.request-summary td { padding: 8px; }.request-summary th { grid-column: 1; }.request-summary td { grid-column: 2; }
+}
+</style>
+
+<style scoped>
+@media(min-width:601px) {
+ .is-image-tab,.is-image-tab .request-tabs { flex: 1; }
+ .is-image-tab .request-tabs :deep(.el-tabs__content) { flex: 1; padding: 12px 16px; }
+ .is-image-tab .request-tabs :deep(#pane-images) { height: 100%; min-height: 0; }
+}
+@media(min-width:601px) and (max-height:820px) {
+ .request-summary th,.request-summary td { padding-top: 5px; padding-bottom: 5px; line-height: 1.6; }
+ .request-summary { margin-bottom: 16px; }
 }
 </style>

@@ -1,21 +1,28 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { fingerLabel } from '@/constants/applicant'
-const props = defineProps({ record: { type: Object, required: true }, large: Boolean })
-defineEmits(['open'])
+const props = defineProps({ record: { type: Object, required: true }, large: Boolean, interactive: { type: Boolean, default: true }, showQuality: { type: Boolean, default: true } })
+defineEmits(['open', 'unavailable'])
 const failed = ref(false)
+const quality = computed(() => Number.isFinite(props.record.qualityScore) ? props.record.qualityScore : '—')
 watch(() => props.record.imageUrl, () => { failed.value = false })
 </script>
 <template>
-  <component :is="large ? 'div' : 'button'" :type="large ? undefined : 'button'" class="enrollment-image" :class="{ large }" :aria-label="large ? undefined : `查看入库图像 ${record.recordId}`" @click="!large && $emit('open', record)">
-    <img v-if="record.imageUrl && !failed" :src="record.imageUrl" :alt="`${record.recordId} ${record.feature === 'face' ? '人脸' : fingerLabel(record.fingerPosition)} Mock 样例`" @error="failed = true" />
-    <span v-else class="image-unavailable">图像不可用</span>
+  <component :is="large || !interactive ? 'div' : 'button'" :type="large || !interactive ? undefined : 'button'" class="enrollment-image" :class="{ large, interactive }" :aria-label="large || !interactive ? undefined : `查看入库图像 ${record.recordId}`" @click="!large && interactive && $emit('open', record)">
+    <span class="image-frame">
+      <img v-if="record.imageUrl && !failed" :src="record.imageUrl" :alt="`${record.recordId} ${record.feature === 'face' ? '人脸' : fingerLabel(record.fingerPosition)} Mock 样例`" @error="failed = true; $emit('unavailable', record.recordId)" />
+      <span v-else class="image-unavailable">图像不可用</span>
+    </span>
+    <span v-if="showQuality" class="quality-score" :class="{ 'quality-score--missing': quality === '—' }" :aria-label="`质量分：${quality}`">{{ quality }}</span>
   </component>
 </template>
 <style scoped>
-.enrollment-image { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 100%; height: 155px; padding: 6px; background: #f4f7fb; border: 1px solid var(--abis-border); border-radius: 7px; overflow: hidden; color: var(--abis-muted); }
+.enrollment-image { box-sizing: border-box; display: flex; flex-direction: column; width: 100%; height: 155px; padding: 0; background: #f4f7fb; border: 1px solid var(--abis-border); border-radius: 7px; overflow: hidden; color: var(--abis-muted); }
+.image-frame { box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; min-height: 0; width: 100%; padding: 5px; }
 .enrollment-image img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; }
-.enrollment-image:not(.large):hover { border-color: var(--el-color-primary); }
-.image-unavailable { font-size: 13px; }
+.enrollment-image.interactive:not(.large):hover { border-color: var(--el-color-primary); }
+.image-unavailable { font-size: 12px; }
+.quality-score { display: block; flex-shrink: 0; width: 100%; padding: 2px 0; background: #dce9f9; color: #315d8f; font-size: 12px; font-weight: 600; line-height: 16px; text-align: center; }
+.quality-score--missing { background: #e8edf3; color: #718096; }
 .large { height: min(52vh,430px); }
 </style>

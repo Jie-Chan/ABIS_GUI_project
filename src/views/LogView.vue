@@ -1,6 +1,8 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import QueryPanel from '@/components/QueryPanel.vue'
+import { useApplicantListStore } from '@/stores/applicants'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { TIME_RANGE_SHORTCUTS } from '@/constants/timeRanges'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
@@ -34,6 +36,9 @@ let clockTimer
 onBeforeUnmount(() => { requestSequence++; clearInterval(clockTimer) })
 
 const route = useRoute()
+const router = useRouter()
+const applicants = useApplicantListStore()
+const canReturnToApplicant = computed(() => route.query.returnTo === 'applicants' && applicants.detailContext.restore && !!applicants.detailContext.userId)
 function routeUserId() {
   const value = Array.isArray(route.query.userId) ? route.query.userId[0] : route.query.userId
   return typeof value === 'string' ? value.trim() : ''
@@ -146,6 +151,8 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
 <template>
   <div class="records-page logs-page">
     <el-card>
+      <QueryPanel>
+      <el-button v-if="canReturnToApplicant" class="return-applicant" link type="primary" @click="router.push({ name: 'applicants' })">返回申请人详情</el-button>
       <el-alert
         v-if="error"
         :title="error"
@@ -155,7 +162,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
       />
 
       <div v-if="query.requestIds.length" class="log-scope"><span>当前显示本次入库变更关联的请求</span><el-button link type="primary" @click="query.requestIds = []; search()">查看该申请人全部日志</el-button></div>
-      <el-form :inline="true" class="logs-filters" @submit.prevent="search">
+      <el-form :inline="true" class="logs-filters query-filters" @submit.prevent="search">
         <div class="filter-row filter-row--primary">
         <el-form-item label="请求 ID" class="log-request-filter">
           <el-input v-model.trim="query.requestId" clearable placeholder="输入完整业务请求 ID" @keyup.enter="search">
@@ -168,7 +175,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
           </el-input>
         </el-form-item>
         <el-form-item label="时间范围" class="log-time-filter">
-          <el-date-picker
+          <el-date-picker popper-class="query-date-popper"
             v-model="timeRange"
             type="datetimerange"
             :shortcuts="TIME_RANGE_SHORTCUTS"
@@ -201,6 +208,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
         </el-form-item>
         </div>
       </el-form>
+      </QueryPanel>
 
       <div class="results-toolbar">
         <span class="record-count" aria-live="polite">共 {{ total }} 个请求</span>
@@ -218,6 +226,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
           <template #default="{ row }">{{ row.operationLabel }}<small class="request-scenario">{{ row.mode === 'sync' ? '同步' : '异步' }}</small></template>
         </el-table-column>
         <el-table-column label="接收时间" min-width="190"><template #default="{ row }">{{ formatLogTime(row.receivedAt) }}</template></el-table-column>
+        <el-table-column label="请求来源 IP" min-width="155"><template #default="{ row }"><span class="log-id">{{ row.sourceIp || '—' }}</span></template></el-table-column>
         <el-table-column label="处理环节" min-width="165"><template #default="{ row }"><span :class="{ 'attention-stage': row.result === 'unknown' || row.result === 'failure' || row.publication === 'pending' }">{{ STAGE_LABEL[row.currentStage] || '—' }}</span><small v-if="row.collectionDelayed" class="collection-hint">日志可能尚未齐全</small></template></el-table-column>
         <el-table-column label="执行状态" width="115">
           <template #default="{ row }">
@@ -256,6 +265,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
 </template>
 
 <style scoped>
+.return-applicant { margin-bottom: 8px; }
 .log-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 .request-scenario { display: block; margin-top: 4px; color: var(--abis-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .request-table :deep(.el-table__row) { cursor: pointer; }

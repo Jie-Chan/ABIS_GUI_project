@@ -1,4 +1,5 @@
 <script setup>
+import QueryPanel from '@/components/QueryPanel.vue'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { TIME_RANGE_SHORTCUTS } from '@/constants/timeRanges'
 import { ElMessage } from 'element-plus'
@@ -102,6 +103,7 @@ onMounted(load)
 <template>
   <div class="records-page audit-page">
     <el-card>
+      <QueryPanel>
       <el-alert
         v-if="error"
         :title="error"
@@ -110,9 +112,9 @@ onMounted(load)
         style="margin-bottom: 12px"
       />
 
-      <el-form :inline="true" class="audits-filters">
+      <el-form :inline="true" class="audits-filters query-filters">
         <el-form-item label="时间范围" class="audit-time">
-          <el-date-picker
+          <el-date-picker popper-class="query-date-popper"
             v-model="timeRange"
             type="datetimerange"
             :shortcuts="TIME_RANGE_SHORTCUTS"
@@ -140,6 +142,7 @@ onMounted(load)
           <el-button @click="resetQuery">重置</el-button>
         </el-form-item>
       </el-form>
+      </QueryPanel>
 
       <div class="results-toolbar">
         <span class="record-count" aria-live="polite">共 {{ total }} 条审计记录</span>

@@ -31,8 +31,8 @@
  * @property {number} faceCount 当前人脸记录数
  * @property {number} fingerCount 当前指纹记录数
  * @property {string} enrolledAt 首次人脸注册成功时间，整人重采保留历史值
- * @property {string} updatedAt 最近更新时间
- * @property {Array<{changeId:string,userId:string,operation:string,feature:string,effectiveAt:string,fingerCount:number|null,requestId:string,requestIds:string[]}>} [changes] 已生效入库变更与明确关联的请求集合
+ * @property {string|null} updatedAt 首次采集之后最近一次成功注册或删除；仅首次采集时为 null
+ * @property {Array<{changeId:string,userId:string,operation:string,feature:string,effectiveAt:string,fingerCount:number|null,requestId:string,requestIds:string[]}>} [changes] 已生效入库变更；requestId 精确定位本次请求，requestIds 仅含自身用于兼容
  * @property {EnrollmentRecord[]} [records] 详情和列表统计使用相同的当前有效记录
  */
 
@@ -41,6 +41,7 @@
  * @property {string} userId 完整业务对象 ID
  * @property {string} recordId 当前有效入库记录 ID
  * @property {'face'|'finger'} feature
+ * @property {number|null} [qualityScore] 图像记录质量分，0 为有效值，缺失不推断
  * @property {string|null} [fingerPosition] 指位枚举；缺失显示指位未标注
  * @property {string} enrolledAt ABIS 确认注册成功的时间
  * @property {string} updatedAt 最近成功改变此记录的时间
@@ -109,6 +110,7 @@
  * @property {string} requestId 逻辑请求唯一标识，重投、调用尝试和发布重试归入同一请求
  * @property {'sync'|'async'} mode 同步一个 ABIS_HANDLING；异步三个顶层阶段，调用阶段内嵌 ABIS_HANDLING
  * @property {string} scenario Mock 场景说明
+ * @property {number} collectionRound 明确采集轮次；1 为首次人脸/指纹采集，2 及以上为后续重采或变更
  * @property {string} receivedAt 接收时间，带时区 ISO 格式
  * @property {string|null} responseSentAt 同步服务端完成响应发送时间
  * @property {string|null} publishedAt 异步最终响应通过路由且可靠发布确认的时间
@@ -118,6 +120,8 @@
  * @property {LogStage[]} stages 按链路逻辑顺序排列，可以在时间上重叠；响应正文存于对应发送 Event
  * @property {string} calledAt
  * @property {string} caller
+ * @property {string|null} sourceIp 已确认的原始请求发起方 IP；不回退到 MQ、适配服务或重试节点
+ * @property {boolean} [historical] Mock 补充历史/重采流程；按用户或请求 ID 查询时可见，默认展示保留 15 条样例
  * @property {string} api
  * @property {string[]} [relatedRequestIds] 注册请求明确关联的查重请求，不能按相邻时间推测
  * @property {EnrollmentRecord[]} [enrollmentRecords] Mock 本次成功注册的完整有效模态记录

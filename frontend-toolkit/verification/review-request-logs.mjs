@@ -29,7 +29,7 @@ try{
  await button('登录').click();await page.waitForURL('**/monitor');await loaded()
  await page.getByRole('menuitem',{name:'日志查询',exact:true}).click();await page.waitForURL('**/logs');await loaded()
  const all=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.originalRequestLogs=api.listLogs;return(await api.listLogs({pageSize:100})).items})
- assert.deepEqual(await page.locator('.request-table th').allTextContents(),['请求 ID','用户 ID','接口类型','接收时间','处理环节','执行状态','响应发布状态','请求耗时','操作'])
+ assert.deepEqual(await page.locator('.request-table th').allTextContents(),['请求 ID','用户 ID','接口类型','接收时间','请求来源 IP','处理环节','执行状态','响应发布状态','请求耗时','操作'])
  assert.equal(all.length,15);assert.equal(new Set(all.map(r=>r.requestId)).size,15)
  assert.deepEqual(all.map(r=>[r.userId,r.api]),[['U001','enrollment'],['U001','enrollment'],['U001','identification'],['U001','identification'],['U002','enrollment'],['U002','identification'],['U002','delete'],['U003','enrollment'],['U004','identification'],['U005','identification'],['U006','identification'],['U007','identification'],['U008','delete'],['U009','identification'],['U010','identification']])
  assert.ok(all.slice(0,12).every(r=>r.mode==='async'));assert.equal(all[12].mode,'sync')
