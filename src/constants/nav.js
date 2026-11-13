@@ -21,7 +21,8 @@ export const CONFIRM_TITLE = '二次确认'
  * 顺序即侧栏顺序，也是路由 children 的顺序。
  */
 export const NAV_ITEMS = [
-  { name: 'monitor',   label: '服务状态监控', permission: PERMISSION.MONITOR_VIEW,   component: () => import('@/views/MonitorView.vue') },
+  { name: 'monitor',   label: '服务状态', permission: PERMISSION.MONITOR_VIEW,   component: () => import('@/views/MonitorView.vue') },
+  { name: 'host-resources', label: '主机资源', permission: PERMISSION.MONITOR_VIEW, component: () => import('@/views/HostResourcesView.vue') },
   { name: 'applicants', label: '申请人列表', permission: PERMISSION.APPLICANT_VIEW, component: () => import('@/views/ApplicantView.vue') },
   { name: 'threshold', label: '匹配阈值配置', permission: PERMISSION.THRESHOLD_EDIT, component: () => import('@/views/ThresholdView.vue') },
   { name: 'accounts',  label: '账户管理',     permission: PERMISSION.ACCOUNT_VIEW, component: () => import('@/views/AccountView.vue') },

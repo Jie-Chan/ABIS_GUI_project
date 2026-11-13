@@ -12,7 +12,7 @@ function recordsFor(userId, feature, confirmedAt, requestId) {
   }))
 }
 
-export function buildApplicants(logs) {
+export function buildEnrollmentSubjects(logs) {
   const baseline = new Date(Date.parse(logs[0].receivedAt) - 86400000).toISOString()
   const seeded = new Map([
     ['U004', recordsFor('U004', 'face', baseline, null)],
@@ -31,26 +31,39 @@ export function buildApplicants(logs) {
       seeded.set(userId, [record])
     }
   }
-  for (const log of logs) {
-    if (log.result !== 'success') continue
-    if (log.api === 'enrollment') {
-      const handling = handlingStages(log)[0]
-      const confirmedAt = handling?.events.find(event => event.kind === 'PROCESSING_ENDED' && event.status === 'SUCCESS')?.at
-      if (!confirmedAt) continue
-      const previous = seeded.get(log.userId) || []
-      seeded.set(log.userId, [...previous.filter(record => record.feature !== log.feature), ...recordsFor(log.userId, log.feature, confirmedAt, log.requestId)])
-    } else if (log.api === 'delete') seeded.delete(log.userId)
+  const firstFace = new Map([...seeded].filter(([, records]) => records.some(r => r.feature === 'face')).map(([id, records]) => [id, records.find(r => r.feature === 'face').enrolledAt]))
+  const updated = new Map([...seeded].map(([id, records]) => [id, records.map(r => r.updatedAt).sort().at(-1)]))
+  const changes = new Map()
+  const byId = new Map(logs.map(log => [log.requestId, log]))
+  const effective = logs.filter(log => log.result === 'success' && ['enrollment', 'delete'].includes(log.api)).map(log => ({ log,
+    at: handlingStages(log).flatMap(s => s.events || []).filter(e => e.kind === 'PROCESSING_ENDED' && e.status === 'SUCCESS').map(e => e.at).filter(Boolean).sort().at(-1),
+  })).filter(item => item.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  for (const { log, at } of effective) {
+    const previous = seeded.get(log.userId) || []
+    const kept = previous.filter(record => record.feature !== log.feature)
+    const records = log.api === 'enrollment'
+      ? (log.enrollmentRecords || recordsFor(log.userId, log.feature, at, log.requestId)).map(record => ({ ...record, userId: log.userId, feature: log.feature, enrolledAt: at, updatedAt: at, requestId: log.requestId })) : []
+    seeded.set(log.userId, [...kept, ...records])
+    if (log.api === 'enrollment' && log.feature === 'face' && !firstFace.has(log.userId)) firstFace.set(log.userId, at)
+    updated.set(log.userId, at)
+    const linked = log.api === 'enrollment' ? (log.relatedRequestIds || []).filter(id => byId.get(id)?.userId === log.userId && byId.get(id)?.api === 'identification') : []
+    const history = changes.get(log.userId) || []
+    history.push({ changeId: log.requestId, userId: log.userId, operation: log.api === 'enrollment' ? '注册' : '删除', feature: log.feature, effectiveAt: at,
+      fingerCount: log.feature === 'finger' && log.api === 'enrollment' ? new Set(records.filter(record => FINGER_POSITIONS.some(position => position.key === record.fingerPosition)).map(record => record.fingerPosition)).size : null,
+      requestId: log.requestId, requestIds: [...new Set([log.requestId, ...linked])],
+    })
+    changes.set(log.userId, history)
   }
-  // 双模态正常样例必须两种注册都确认成功后才展示。
-  const u001 = seeded.get('U001') || []
-  if (!u001.some(record => record.feature === 'face') || !u001.some(record => record.feature === 'finger')) seeded.delete('U001')
-  return [...seeded].sort(([a], [b]) => a.localeCompare(b)).map(([userId, records]) => {
-    const enrolledAt = records.map(record => record.enrolledAt).sort()[0]
-    const updatedAt = records.map(record => record.updatedAt).sort().at(-1)
-    return {
-      userId, faceCount: records.filter(record => record.feature === 'face').length,
-      fingerCount: records.filter(record => record.feature === 'finger').length,
-      enrolledAt: formatLogTime(enrolledAt), updatedAt: formatLogTime(updatedAt), records,
-    }
-  })
+  return [...seeded].sort(([a], [b]) => a.localeCompare(b)).map(([userId, records]) => ({
+    userId, faceCount: records.filter(record => record.feature === 'face').length,
+    fingerCount: records.filter(record => record.feature === 'finger').length,
+    enrolledAt: firstFace.has(userId) ? formatLogTime(firstFace.get(userId)) : null,
+    updatedAt: formatLogTime(updated.get(userId)), records,
+    changes: [...(changes.get(userId) || [])].reverse(),
+  }))
+}
+
+/** 只有当前有效人脸记录的对象进入申请人列表；指纹允许缺采。 */
+export function buildApplicants(logs) {
+  return buildEnrollmentSubjects(logs).filter(person => person.faceCount > 0)
 }

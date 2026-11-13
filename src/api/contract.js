@@ -30,8 +30,9 @@
  * @property {string} userId 申请人业务 ID，按字符串保存
  * @property {number} faceCount 当前人脸记录数
  * @property {number} fingerCount 当前指纹记录数
- * @property {string} enrolledAt 首次入库时间
+ * @property {string} enrolledAt 首次人脸注册成功时间，整人重采保留历史值
  * @property {string} updatedAt 最近更新时间
+ * @property {Array<{changeId:string,userId:string,operation:string,feature:string,effectiveAt:string,fingerCount:number|null,requestId:string,requestIds:string[]}>} [changes] 已生效入库变更与明确关联的请求集合
  * @property {EnrollmentRecord[]} [records] 详情和列表统计使用相同的当前有效记录
  */
 
@@ -52,7 +53,6 @@
  * @property {number} [page=1]
  * @property {number} [pageSize=20]
  * @property {string} [userId] 去除首尾空白后精确匹配
- * @property {''|'face'|'finger'|'both'} [modality] face/finger 表示仅此模态，both 表示同时包含两种
  * @property {'enrolledAt'|'updatedAt'} [sortBy] 全量过滤后排序，再分页
  * @property {'ascending'|'descending'} [sortOrder]
  * @property {string} [startTime] 首次入库时间下界，YYYY-MM-DD HH:mm:ss，包含边界
@@ -71,12 +71,35 @@
  * @typedef {Object} MonitorItem
  * @property {string} key
  * @property {string} name
- * @property {Array<{id: string, name?: string, status: 'normal'|'abnormal'|'unknown'}>} instances 按实例统计，未知仍计入总数
+ * @property {MonitorHost} [host] 算法分组共用的 VM
+ * @property {Array<{id: string, name?: string, status: 'normal'|'abnormal'|'unknown', host?: MonitorHost}>} instances 按实例统计，未知仍计入总数
  * @property {MonitorMetrics} [metrics]  可选原始指标，当前监控界面不展示授权或底库信息
  *
  * ⚠ metrics **不保证存在**：非算法服务对象上它可能是缺失的键，
  *   也可能是存在但为 undefined 的键（取决于适配器是否经过序列化边界）。
  *   消费方一律按真值判断（`if (item.metrics)`），不得使用 `'metrics' in item`。
+ */
+
+/**
+ * @typedef {Object} MonitorHost
+ * @property {string} id 服务与资源共用的固定主机或 VM 标识
+ * @property {string} name
+ * @property {string} ip
+ */
+
+/**
+ * @typedef {Object} HostResourceSample
+ * @property {number} cpuPercent
+ * @property {number} memoryUsedGiB
+ * @property {number} memoryTotalGiB
+ * @property {number} diskFreeGiB 业务数据卷剩余容量
+ * @property {number} diskTotalGiB
+ * @property {string} mount 业务数据卷或挂载点
+ * @property {string} collectedAt YYYY-MM-DD HH:mm:ss；独立于服务探测时间
+ */
+
+/**
+ * @typedef {'default'|'original'|'deleted'|'face'|'complete'|'failed'|'document-original'|'document-deleted'|'document-face'|'document-complete'} RecaptureScenario 仅 Mock 演示状态
  */
 
 /**
@@ -96,6 +119,8 @@
  * @property {string} calledAt
  * @property {string} caller
  * @property {string} api
+ * @property {string[]} [relatedRequestIds] 注册请求明确关联的查重请求，不能按相邻时间推测
+ * @property {EnrollmentRecord[]} [enrollmentRecords] Mock 本次成功注册的完整有效模态记录
  * @property {string} apiLabel
  * @property {'face'|'finger'} feature
  * @property {'success'|'failure'|'running'|'waiting'|'unknown'} result 执行状态
@@ -160,6 +185,7 @@
  * @typedef {Object} LogQueryParams
  * @property {string} [userId] 申请人 ID，去除首尾空白后精确匹配
  * @property {string} [requestId] 业务请求 ID，去除首尾空白后精确匹配；与其他条件取交集
+ * @property {string[]} [requestIds] 明确关联的请求集合；成员按完整 ID 匹配，与 userId、requestId 和其他筛选条件取交集
  * @property {number} [page]
  * @property {number} [pageSize]
  * @property {string} [startTime] 见下方 ⚠ —— 必须是 'YYYY-MM-DD HH:mm:ss'
@@ -206,6 +232,9 @@
  * @property {() => Promise<{face: number, finger: number}>} getThresholds
  * @property {(payload: {face?: number, finger?: number}) => Promise<{face: number, finger: number}>} updateThresholds
  * @property {() => Promise<{items: MonitorItem[], fetchedAt: string}>} getHealth
+ * @property {() => Promise<{items: Array<MonitorHost & {sample: HostResourceSample|null}>}>} getHostResources 无资源样本不影响服务状态
+ * @property {() => Promise<{scenario: RecaptureScenario, userId: string}>} getRecaptureScenario 仅 Mock；HTTP 适配器明确拒绝
+ * @property {(scenario: RecaptureScenario) => Promise<{scenario: RecaptureScenario, userId: string}>} setRecaptureScenario 仅 Mock；切换当前会话的共享业务快照，default 恢复 15 条日志
  * @property {(params?: LogQueryParams) => Promise<{total: number, items: LogRecord[]}>} listLogs
  * @property {(params?: AuditQueryParams) => Promise<{total: number, items: AuditRecord[]}>} listAudits
  * @property {(params?: LogQueryParams) => Promise<Blob>} exportLogs
@@ -221,7 +250,7 @@ export const API_METHODS = [
   'listAccounts', 'createAccount', 'updateAccount', 'deleteAccount', 'resetPassword',
   'listApplicants', 'getApplicant', 'getUserImage',
   'getThresholds', 'updateThresholds',
-  'getHealth',
+  'getHealth', 'getHostResources', 'getRecaptureScenario', 'setRecaptureScenario',
   'listLogs', 'listAudits',
   'exportLogs', 'exportAudits',
 ]

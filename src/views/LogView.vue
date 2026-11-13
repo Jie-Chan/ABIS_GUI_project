@@ -38,6 +38,7 @@ function routeUserId() {
   const value = Array.isArray(route.query.userId) ? route.query.userId[0] : route.query.userId
   return typeof value === 'string' ? value.trim() : ''
 }
+function routeRequestIds() { const value = route.query.requestIds; return [...new Set((Array.isArray(value) ? value : value ? [value] : []).filter(id => typeof id === 'string' && id.trim()).map(id => id.trim()))] }
 function routeRequestId() { const value = route.query.requestId; return typeof value === 'string' ? value.trim() : '' }
 const emptyQuery = (userId = '') => ({
   page: 1,
@@ -49,8 +50,7 @@ const emptyQuery = (userId = '') => ({
   api: '',
   feature: '',
   result: '',
-  minCost: null,
-  maxCost: null,
+  requestIds: routeRequestIds(),
 })
 const query = ref(emptyQuery(routeUserId()))
 
@@ -70,7 +70,7 @@ function syncTimeRange() {
 
 function resetQuery() {
   timeRange.value = []
-  query.value = { ...emptyQuery(), requestId: '' }
+  query.value = { ...emptyQuery(), requestId: '', requestIds: [] }
   load()
 }
 
@@ -136,7 +136,7 @@ onMounted(() => {
   load()
   clockTimer = setInterval(() => { now.value = Date.now() }, 1000)
 })
-watch(() => [route.query.userId, route.query.requestId], () => {
+watch(() => [route.query.userId, route.query.requestId, route.query.requestIds], () => {
   query.value = emptyQuery(routeUserId())
   timeRange.value = []
   load()
@@ -154,6 +154,7 @@ watch(() => [route.query.userId, route.query.requestId], () => {
         style="margin-bottom: 12px"
       />
 
+      <div v-if="query.requestIds.length" class="log-scope"><span>当前显示本次入库变更关联的请求</span><el-button link type="primary" @click="query.requestIds = []; search()">查看该申请人全部日志</el-button></div>
       <el-form :inline="true" class="logs-filters" @submit.prevent="search">
         <div class="filter-row filter-row--primary">
         <el-form-item label="请求 ID" class="log-request-filter">
@@ -176,10 +177,7 @@ watch(() => [route.query.userId, route.query.requestId], () => {
             end-placeholder="结束时间"
           />
         </el-form-item>
-        <el-form-item class="log-actions">
-          <el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button>
-          <el-button @click="resetQuery">重置</el-button>
-        </el-form-item>
+
         </div>
         <div class="filter-row filter-row--secondary">
         <el-form-item label="接口类型" class="log-api-filter">
@@ -197,10 +195,9 @@ watch(() => [route.query.userId, route.query.requestId], () => {
             <el-option v-for="r in LOG_RESULTS" :key="r.key" :label="r.label" :value="r.key" />
           </el-select>
         </el-form-item>
-        <el-form-item label="总耗时区间(ms)" class="log-cost-filter">
-          <el-input-number v-model="query.minCost" :min="0" :controls="false" placeholder="最小" style="width: 100px" />
-          <span class="dash">—</span>
-          <el-input-number v-model="query.maxCost" :min="0" :controls="false" placeholder="最大" style="width: 100px" />
+        <el-form-item class="log-actions">
+          <el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button>
+          <el-button @click="resetQuery">重置</el-button>
         </el-form-item>
         </div>
       </el-form>
@@ -250,7 +247,7 @@ watch(() => [route.query.userId, route.query.requestId], () => {
       />
 
       <p class="note">
-        每个逻辑请求展示一行，重投和重试记录可在详情中展开查看。总耗时筛选仅匹配已完成最终响应且耗时有效的请求。CSV 仅导出日志元数据，不包含图像。
+        每个逻辑请求展示一行，重投和重试记录可在详情中展开查看。CSV 仅导出日志元数据，不包含图像。
       </p>
     </el-card>
 
@@ -264,22 +261,21 @@ watch(() => [route.query.userId, route.query.requestId], () => {
 .request-table :deep(.el-table__row) { cursor: pointer; }
 .attention-stage, .collection-hint { color: var(--el-color-warning); }
 .collection-hint { display: block; font-size: 11px; }
-.logs-filters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.logs-filters :deep(.el-form-item) { display: flex; flex-direction: row; align-items: center; margin: 0; min-width: 0; }
-.logs-filters :deep(.el-form-item__label) { float: none; height: 32px; line-height: 32px; padding: 0 8px 0 0; white-space: nowrap; }
+.logs-filters { display: grid; grid-template-columns: minmax(250px,1fr) minmax(240px,0.9fr) minmax(400px,1.6fr) auto; gap: 8px 16px; margin-bottom: 14px; }
+.filter-row { display: contents; }
+.log-request-filter { grid-column: 1; grid-row: 1; }.log-user-filter { grid-column: 2; grid-row: 1; }.log-time-filter { grid-column: 3; grid-row: 1; }.log-api-filter { grid-column: 1; grid-row: 2; }.log-feature-filter { grid-column: 2; grid-row: 2; }.log-result-filter { grid-column: 3; grid-row: 2; }.log-actions { grid-column: 4; grid-row: 2; justify-self: end; }
+.logs-filters :deep(.el-form-item) { display: flex; align-items: center; margin: 0; min-width: 0; }
+.logs-filters :deep(.el-form-item__label) { width: 76px; padding: 0 8px 0 0; justify-content: flex-start; line-height: 36px; height: 36px; white-space: nowrap; }
 .logs-filters :deep(.el-form-item__content) { min-width: 0; flex: 1; }
-.filter-row--primary .log-request-filter,.filter-row--primary .log-user-filter { flex: 1 1 210px; }
-.filter-row--primary .log-time-filter { flex: 1.7 1 400px; }
 .logs-filters :deep(.el-date-editor) { width: 100%; min-width: 0; }
-.log-actions { flex: 0 0 auto; }
+.logs-filters .log-api-filter :deep(.el-select) { width: min(240px,100%) !important; }
+.log-scope { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; font-size: 13px; color: var(--abis-muted); }
+@media(max-width:1199px) {
+ .logs-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }.filter-row { display: contents; }.logs-filters :deep(.el-form-item) { grid-column: auto; grid-row: auto; }.logs-filters .log-time-filter { grid-column: 1 / -1; }.log-actions { justify-self: start; }
+}
 @media(max-width:767px) {
-  .filter-row--primary .log-request-filter,.filter-row--primary .log-user-filter,.filter-row--primary .log-time-filter { flex-basis: 100%; }
-  .logs-filters :deep(.el-form-item__label) { width: 100px; justify-content: flex-start; }
-  .log-api-filter,.log-feature-filter,.log-result-filter,.log-cost-filter { width: 100%; }
-  .log-api-filter :deep(.el-select),.log-feature-filter :deep(.el-select),.log-result-filter :deep(.el-select) { width: 100% !important; }
-  .log-cost-filter :deep(.el-input-number) { width: calc((100% - 25px)/2) !important; }
-  .logs-page :deep(.el-table-fixed-column--right) { position: static !important; }.logs-page :deep(.el-table-fixed-column--right::before) { display: none; }
+ .logs-filters { grid-template-columns: minmax(0,1fr); }.logs-filters :deep(.el-form-item) { grid-column: 1; }.log-actions { justify-self: end; }
+ .logs-page :deep(.el-table-fixed-column--right) { position: static !important; }.logs-page :deep(.el-table-fixed-column--right::before) { display: none; }
 }
 .dash { margin: 0 8px; color: #8c99ac; }
 .note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }

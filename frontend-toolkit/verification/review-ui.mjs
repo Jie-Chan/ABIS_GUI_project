@@ -25,6 +25,10 @@ const noOverflow=async name=>{
 const snap=async name=>{await page.waitForFunction(()=>!document.querySelector('.el-message'));await page.screenshot({path:`${out}/${name}.png`,fullPage:true})}
 const settings=page.getByRole('button',{name:'设置',exact:true})
 const nav=async(name,path)=>{
+ if(path==='monitor'){
+   name='服务状态'
+   await page.getByRole('button',{name:'监控',exact:true}).click()
+ }
  if(['threshold','accounts'].includes(path)){
    const submenu=page.getByRole('menuitem',{name,exact:true})
    if(!await submenu.isVisible())await settings.click()
@@ -98,10 +102,11 @@ try{
  pass('wrong password remains rejected')
  await login('admin','admin123')
  assert.deepEqual(await page.locator('.status-overview dd').allTextContents(),['10','8','1','1'])
- assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),4)
+ assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),3)
+ assert.equal(await page.locator('.monitor-trigger').count(),1)
  assert.equal(await settings.count(),1)
  assert.equal(await page.locator('.aside').count(),0)
- pass('admin sees four primary links plus Settings; monitoring counts use normal/abnormal totals')
+ pass('admin sees three primary links plus Monitoring and Settings; monitoring counts use normal/abnormal totals')
  await checkHeader('desktop at 1600px')
  for(const width of [1251,1250,1001,1000]){
    await page.setViewportSize({width,height:1000})
@@ -254,7 +259,7 @@ try{
  await page.setViewportSize({width:390,height:844});await snap('mobile-login')
  await login('ops.zhang','ops123')
  assert.equal(await settings.count(),1)
- assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),4)
+ assert.equal(await page.locator('.primary-navigation > .el-menu > .el-menu-item').count(),3)
  await nav('匹配阈值配置','threshold')
  await page.evaluate(async()=>{await document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/accounts')})
  await page.waitForURL('**/monitor')

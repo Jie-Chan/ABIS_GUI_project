@@ -13,8 +13,8 @@ watch(() => props.record.imageUrl, () => { failed.value = false })
   </component>
 </template>
 <style scoped>
-.enrollment-image { display: grid; place-items: center; width: 100%; height: 155px; padding: 6px; background: #f4f7fb; border: 1px solid var(--abis-border); border-radius: 7px; overflow: hidden; color: var(--abis-muted); }
-.enrollment-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.enrollment-image { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 100%; height: 155px; padding: 6px; background: #f4f7fb; border: 1px solid var(--abis-border); border-radius: 7px; overflow: hidden; color: var(--abis-muted); }
+.enrollment-image img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; object-fit: contain; }
 .enrollment-image:not(.large):hover { border-color: var(--el-color-primary); }
 .image-unavailable { font-size: 13px; }
 .large { height: min(52vh,430px); }

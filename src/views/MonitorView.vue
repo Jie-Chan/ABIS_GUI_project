@@ -39,10 +39,10 @@ onUnmounted(() => store.stop())
     <section v-loading="store.loading" class="service-list" aria-label="服务列表" :aria-busy="store.loading">
       <div v-if="visibleGroups.length" class="service-grid">
         <article v-for="group in visibleGroups" :key="group.key" class="service-card" :data-service="group.key" :aria-label="group.name">
-          <header class="service-heading"><UiIcon :name="['postgresql', 'minio'].includes(group.key) ? 'database' : 'server'" :size="20" /><h3>{{ group.name }}</h3></header>
+          <header class="service-heading"><UiIcon :name="['postgresql', 'minio'].includes(group.key) ? 'database' : 'server'" :size="20" /><h3>{{ group.name }}</h3><p v-if="group.host" class="deployment-info">{{ group.host.name }} · {{ group.host.ip }}</p></header>
           <ul class="service-instances">
             <li v-for="instance in group.instances" :key="instance.id" class="instance-row" :data-instance="instance.id">
-              <div class="instance-identity"><span v-if="instance.name" class="instance-name">{{ instance.name }}</span><span class="instance-id">{{ instance.id }}</span></div>
+              <div class="instance-identity"><span v-if="instance.name" class="instance-name">{{ instance.name }}</span><span class="instance-id">{{ instance.id }}</span><span v-if="instance.host" class="deployment-info">{{ instance.host.name }} · {{ instance.host.ip }}</span></div>
               <span class="instance-state" :class="MONITOR_STATUS_META[monitorState(instance.status)].tagType">{{ MONITOR_STATUS_META[monitorState(instance.status)].label }}</span>
             </li>
           </ul>
@@ -71,7 +71,8 @@ onUnmounted(() => store.stop())
 .service-grid { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 18px; }
 .service-card { grid-column: span 2; min-width: 0; border: 1px solid var(--abis-border); border-radius: 8px; background: #f9fbfd; overflow: hidden; }
 .service-card:nth-child(n+4) { grid-column: span 3; }
-.service-heading { display: flex; align-items: center; gap: 10px; padding: 18px 20px; border-bottom: 1px solid var(--abis-border); color: #536b87; }
+.service-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 18px 20px; border-bottom: 1px solid var(--abis-border); color: #536b87; }
+.service-heading .deployment-info { width: 100%; margin: 0 0 0 30px; }.deployment-info { font-size: 12px; line-height: 1.6; color: var(--abis-muted); overflow-wrap: anywhere; }
 .service-heading h3 { margin: 0; color: var(--el-text-color-primary); font-size: 16px; font-weight: 600; }
 .service-instances { margin: 0; padding: 0 20px; list-style: none; }
 .instance-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; min-height: 68px; padding: 14px 0; border-bottom: 1px solid var(--abis-border); }

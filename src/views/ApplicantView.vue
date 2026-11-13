@@ -8,6 +8,25 @@ import ApplicantDetailDrawer from '@/components/ApplicantDetailDrawer.vue'
 import { TIME_RANGE_SHORTCUTS } from '@/constants/timeRanges'
 import { emptyApplicantQuery, useApplicantListStore } from '@/stores/applicants'
 
+const isMock = import.meta.env.VITE_USE_MOCK !== 'false'
+const scenario = ref('default'), scenarioVisible = ref(false), scenarioLoading = ref(false), scenarioError = ref('')
+const scenarioOptions = [ { value:'original',label:'原有人脸及 10 指' },{value:'deleted',label:'双模态删除，暂时退出列表'},{value:'face',label:'新人脸入库，恢复列表'},{value:'complete',label:'新指纹：9 指位、10 条记录'},{value:'failed',label:'新人脸成功，指纹注册失败'} ]
+const documentScenarios = [{value:'document-original',label:'三人旧数据有效'},{value:'document-deleted',label:'三人双模态删除'},{value:'document-face',label:'三人新人脸入库'},{value:'document-complete',label:'三人重采结果'}]
+async function changeScenario(value) {
+  scenarioLoading.value = true; scenarioError.value = ''
+  try {
+    const result = await api.setRecaptureScenario(value)
+    scenario.value = result.scenario
+    query.value.userId = value === 'default' ? '' : result.userId
+    query.value.page = 1
+    timeRange.value = []
+    listStore.detailContext.restore = false
+    drawerVisible.value = false
+    await load()
+  }
+  catch(e) { scenarioError.value = e.message || '读取重采样例失败' }
+  finally { scenarioLoading.value = false }
+}
 const router = useRouter()
 const listStore = useApplicantListStore()
 const { query, timeRange } = storeToRefs(listStore)
@@ -37,20 +56,28 @@ function changeSort({ prop, order }) {
   if (sortBy === query.value.sortBy && sortOrder === query.value.sortOrder) return
   query.value.sortBy = sortBy; query.value.sortOrder = sortOrder; return search()
 }
-async function openDetail(userId) {
+async function openDetail(userId, restoring = false) {
+  if (!restoring) listStore.detailContext = { userId, tab: 'images', scroll: 0, restore: false }
   selectedUserId.value = userId; drawerVisible.value = true; detail.value = null; detailError.value = ''; detailLoading.value = true
   const sequence = ++detailSequence
   try { const result = await api.getApplicant(userId); if (sequence === detailSequence) detail.value = result }
   catch (e) { if (sequence === detailSequence) detailError.value = e.message || '读取申请人详情失败，请重试' }
   finally { if (sequence === detailSequence) detailLoading.value = false }
 }
-function closeDetail() { ++detailSequence; detail.value = null; detailError.value = ''; detailLoading.value = false }
-function viewLogs(userId) { return router.push({ name: 'logs', query: { userId } }) }
-function viewRecordLogs(record) { return router.push({ name: 'logs', query: { userId: record.userId, requestId: record.requestId } }) }
+function closeDetail() { listStore.detailContext.restore = false; ++detailSequence; detail.value = null; detailError.value = ''; detailLoading.value = false }
+function viewChangeLogs(change) { return router.push({ name: 'logs', query: { userId: change.userId, requestIds: change.requestIds } }) }
+function restoreDetailPosition() {
+  const context = listStore.detailContext
+  if (context.restore) document.querySelector('.applicant-drawer .el-drawer__body')?.scrollTo(0, context.scroll)
+}
 onBeforeRouteLeave(() => {
+  if (drawerVisible.value) listStore.detailContext = { ...listStore.detailContext, userId: selectedUserId.value,
+    scroll: document.querySelector('.applicant-drawer .el-drawer__body')?.scrollTop || 0, restore: true }
+
   listStore.scroll = { y: window.scrollY, x: tableRef.value?.$el.querySelector('.el-scrollbar__wrap')?.scrollLeft || 0, restore: true }
 })
 onMounted(async () => {
+  if (isMock) { try { scenario.value = (await api.getRecaptureScenario()).scenario; scenarioVisible.value = scenario.value !== 'default' } catch {} }
   await load(); await nextTick()
   if (listStore.scroll.restore) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -59,6 +86,7 @@ onMounted(async () => {
     if (wrapper) wrapper.scrollLeft = listStore.scroll.x
     listStore.scroll.restore = false
   }
+  if (listStore.detailContext.restore && listStore.detailContext.userId) { await openDetail(listStore.detailContext.userId, true); await nextTick(); restoreDetailPosition() }
 })
 onBeforeUnmount(() => { ++listSequence; ++detailSequence })
 </script>
@@ -68,30 +96,37 @@ onBeforeUnmount(() => { ++listSequence; ++detailSequence })
     <el-card>
       <el-alert v-if="error" :title="error" type="error" :closable="false" class="query-error" />
       <el-form :inline="true" class="applicant-filters" @submit.prevent="search">
-        <el-form-item label="申请人 ID"><el-input v-model.trim="query.userId" clearable placeholder="输入完整申请人 ID" @keyup.enter="search"><template #prefix><UiIcon name="search" :size="16" /></template></el-input></el-form-item>
-        <el-form-item label="入库模态"><el-select v-model="query.modality" aria-label="入库模态" placeholder="全部"><el-option label="全部" value="" /><el-option label="仅人脸" value="face" /><el-option label="仅指纹" value="finger" /><el-option label="人脸和指纹均已入库" value="both" /></el-select></el-form-item>
+        <el-form-item label="申请人 ID" class="applicant-id-filter"><el-input v-model.trim="query.userId" clearable placeholder="输入完整申请人 ID" @keyup.enter="search"><template #prefix><UiIcon name="search" :size="16" /></template></el-input></el-form-item>
         <el-form-item label="首次入库时间" class="enrollment-range"><el-date-picker v-model="timeRange" type="datetimerange" value-format="YYYY-MM-DD HH:mm:ss" :shortcuts="TIME_RANGE_SHORTCUTS" start-placeholder="开始时间" end-placeholder="结束时间" /></el-form-item>
         <el-form-item class="query-actions"><el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button><el-button @click="reset">重置</el-button></el-form-item>
       </el-form>
-      <div class="results-toolbar"><span class="record-count" aria-live="polite">共 {{ total }} 位申请人</span><span class="population-note">仅展示已确认注册成功且当前有效的申请人</span></div>
+      <div class="results-toolbar"><span class="record-count" aria-live="polite">共 {{ total }} 位申请人</span><span class="population-note">仅展示已确认注册成功且当前有效的申请人</span><el-button v-if="isMock" link type="primary" @click="scenarioVisible = !scenarioVisible">重采样例</el-button></div>
+      <section v-if="isMock && scenarioVisible" class="recapture-demo" aria-label="整人重采 Mock 样例">
+        <p><strong>整人重采 Mock 样例 · U900</strong> <span>可依次切换验收状态；恢复默认数据后仍为原 15 条日志。</span></p>
+        <div class="scenario-choices"><el-button v-for="item in scenarioOptions" :key="item.value" :type="scenario === item.value ? 'primary' : 'default'" :loading="scenarioLoading && scenario === item.value" :disabled="scenarioLoading" @click="changeScenario(item.value)">{{ item.label }}</el-button><el-button :disabled="scenarioLoading" @click="changeScenario('default')">恢复默认数据</el-button></div>
+        <p class="document-samples"><strong>开发文档样例 · U301 / U302 / U303</strong> <span>U301：9 指位、10 条记录；U302：8 指重采为 10 指；U303：新人脸成功、指纹失败。切换后可按申请人 ID 查看。</span></p>
+        <div class="scenario-choices"><el-button v-for="item in documentScenarios" :key="item.value" :type="scenario === item.value ? 'primary' : 'default'" :disabled="scenarioLoading" @click="changeScenario(item.value)">{{ item.label }}</el-button></div>
+        <el-alert v-if="scenarioError" :title="scenarioError" type="error" :closable="false" />
+      </section>
       <el-table ref="tableRef" :data="rows" row-key="userId" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配的申请人'" :default-sort="{ prop: query.sortBy, order: query.sortOrder }" border @sort-change="changeSort">
         <el-table-column prop="userId" label="申请人 ID" min-width="150"><template #default="{ row }"><span class="applicant-id">{{ row.userId }}</span></template></el-table-column>
-        <el-table-column label="人脸入库" min-width="140"><template #default="{ row }"><el-tag :type="row.faceCount ? 'success' : 'info'">{{ row.faceCount ? `已入库 · ${row.faceCount} 条` : '未入库' }}</el-tag></template></el-table-column>
-        <el-table-column label="指纹入库" min-width="140"><template #default="{ row }"><el-tag :type="row.fingerCount ? 'success' : 'info'">{{ row.fingerCount ? `已入库 · ${row.fingerCount} 条` : '未入库' }}</el-tag></template></el-table-column>
         <el-table-column prop="enrolledAt" label="首次入库时间" min-width="205" sortable="custom" />
-        <el-table-column prop="updatedAt" label="最近更新时间" min-width="205" sortable="custom" />
-        <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row.userId)">查看详情</el-button><el-button link type="primary" @click="viewLogs(row.userId)">查看日志</el-button></template></el-table-column>
+        <el-table-column prop="updatedAt" label="最近入库变更时间" min-width="205" sortable="custom" />
+        <el-table-column label="操作" width="120" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row.userId)">查看详情</el-button></template></el-table-column>
       </el-table>
       <el-pagination :current-page="query.page" :page-size="query.pageSize" :total="total" :page-sizes="[2, 5, 20, 50]" layout="total, sizes, prev, pager, next" class="applicant-pagination" @update:current-page="changePage" @update:page-size="changePageSize" />
-      <p class="note">当前入库状态与请求日志共用业务数据，查重和失败请求不改变有效记录。删除成功的人员仅保留历史日志。</p>
+      <p class="note">当前图像与请求日志共用业务数据；仅已生效的入库变更会更新当前记录，查重和失败请求不改变有效记录。</p>
     </el-card>
-    <ApplicantDetailDrawer v-model="drawerVisible" :detail="detail" :loading="detailLoading" :error="detailError" @closed="closeDetail" @retry="openDetail(selectedUserId)" @record-log="viewRecordLogs" />
+    <ApplicantDetailDrawer v-model="drawerVisible" :detail="detail" :loading="detailLoading" :error="detailError" @closed="closeDetail" @retry="openDetail(selectedUserId)" @change-log="viewChangeLogs" @opened="restoreDetailPosition" v-model:active-tab="listStore.detailContext.tab" />
   </div>
 </template>
 <style scoped>
+.recapture-demo { padding:14px; margin-bottom:14px; border:1px solid var(--abis-border); border-radius:6px; background:#f7f9fc; }.recapture-demo p { margin:0 0 12px; font-size:13px; line-height:1.8; }.recapture-demo span { color:var(--abis-muted); }.scenario-choices { display:flex; flex-wrap:wrap; gap:8px; }.scenario-choices :deep(.el-button + .el-button) { margin-left:0; }
+.recapture-demo .document-samples { margin-top: 14px; }
 .query-error { margin-bottom: 12px; }
 .applicant-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px; }.applicant-filters > .el-form-item { width: 220px; margin: 0; }.applicant-filters > .enrollment-range { width: 410px; }.applicant-filters > .query-actions { width: auto; }.applicant-filters :deep(.el-form-item__label) { white-space: nowrap; }.applicant-filters :deep(.el-form-item__content) { min-width: 0; flex: 1; }
 .applicant-filters :deep(.el-select),.applicant-filters :deep(.el-date-editor) { width: 100%; }
+.applicant-filters > .applicant-id-filter { width: 260px; }
 .applicant-pagination { margin-top: 12px; justify-content: flex-end; }.applicant-id { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap: anywhere; font-weight: 600; }
 .population-note { color: var(--el-text-color-secondary); font-size: 12px; }
 @media(max-width:767px){.applicant-filters > .el-form-item { width: 100%; }.applicants-page :deep(.el-table-fixed-column--right) { position: static !important; }.applicants-page :deep(.el-table-fixed-column--right::before) { display: none; }}

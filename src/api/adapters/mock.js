@@ -7,6 +7,9 @@
 import { mockAccounts, mockCredentials } from '@/mock/accounts'
 import { mockThresholds } from '@/mock/thresholds'
 import { buildMonitorSnapshot } from '@/mock/monitor'
+import { buildHostResources } from '@/mock/hosts'
+import { buildRecaptureLogs, buildDocumentRecaptureLogs } from '@/mock/recapture'
+import { buildEnrollmentSubjects } from '@/mock/applicants'
 import { buildBusinessSnapshot } from '@/mock/business'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
@@ -25,7 +28,9 @@ let nextAccountId = accounts.length + 1
 const credentials = mockCredentials.map((credential) => ({ ...credential }))
 let sessionAccountId = null
 
-const { logs, applicants } = buildBusinessSnapshot()
+const defaultBusiness = buildBusinessSnapshot()
+let { logs, applicants, subjects } = defaultBusiness
+let recaptureScenario = 'default'
 const audits = buildAuditRecords()
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
@@ -196,17 +201,35 @@ export default {
     return buildMonitorSnapshot()
   },
 
+  async getHostResources() {
+    await delay()
+    if (!hasPermission(currentAccount().role, PERMISSION.MONITOR_VIEW)) throw new Error('没有监控查看权限')
+    return buildHostResources()
+  },
+  async getRecaptureScenario() { currentAccount(); return { scenario: recaptureScenario, userId: recaptureScenario.startsWith('document-') ? '' : 'U900' } },
+  async setRecaptureScenario(scenario) {
+    if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有申请人查看权限')
+    if (!['default','original','deleted','face','complete','failed','document-original','document-deleted','document-face','document-complete'].includes(scenario)) throw new Error('未知的重采样例状态')
+    recaptureScenario = scenario
+    if (scenario === 'default') ({ logs, applicants, subjects } = defaultBusiness)
+    else {
+      const documentScenario = scenario.startsWith('document-')
+      const extra = documentScenario ? buildDocumentRecaptureLogs(scenario.slice(9)) : buildRecaptureLogs({ fingerFailure: scenario === 'failed' }).slice(0, ({original:3,deleted:5,face:6,complete:9,failed:9})[scenario])
+      logs = [...defaultBusiness.logs, ...extra]
+      subjects = [...defaultBusiness.subjects, ...buildEnrollmentSubjects(extra).filter(person => (documentScenario ? ['U301', 'U302', 'U303'] : ['U900']).includes(person.userId))]
+      applicants = subjects.filter(person => person.faceCount > 0)
+    }
+    return { scenario, userId: scenario.startsWith('document-') ? '' : 'U900' }
+  },
+
   // ——— 日志与审计查询（需求 1.4 / 2.2）———
 
-  async listApplicants({ page = 1, pageSize = 20, userId = '', modality = '', startTime = '', endTime = '', sortBy = '', sortOrder = '' } = {}) {
+  async listApplicants({ page = 1, pageSize = 20, userId = '', startTime = '', endTime = '', sortBy = '', sortOrder = '' } = {}) {
     await delay()
     if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有申请人查看权限')
     const id = userId.trim()
     const filtered = applicants.filter(person => {
       if (id && person.userId !== id) return false
-      if (modality === 'face' && (!person.faceCount || person.fingerCount)) return false
-      if (modality === 'finger' && (!person.fingerCount || person.faceCount)) return false
-      if (modality === 'both' && (!person.faceCount || !person.fingerCount)) return false
       if (startTime && Date.parse(person.enrolledAt) < Date.parse(startTime)) return false
       if (endTime && Date.parse(person.enrolledAt) > Date.parse(endTime) + (endTime.length === 19 ? 999 : 0)) return false
       return true
@@ -214,7 +237,7 @@ export default {
     if (['enrolledAt', 'updatedAt'].includes(sortBy) && ['ascending', 'descending'].includes(sortOrder)) {
       filtered.sort((a, b) => (Date.parse(a[sortBy]) - Date.parse(b[sortBy])) * (sortOrder === 'ascending' ? 1 : -1) || a.userId.localeCompare(b.userId))
     }
-    return paginate(filtered.map(({ records, ...person }) => ({ ...person })), { page, pageSize })
+    return paginate(filtered.map(({ records, changes, ...person }) => ({ ...person })), { page, pageSize })
   },
 
   async getApplicant(userId) {
@@ -222,18 +245,19 @@ export default {
     if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有申请人查看权限')
     const person = applicants.find(item => item.userId === userId)
     if (!person) throw new Error('申请人不存在或已不在库中')
-    return { ...person, records: person.records.map(record => ({ ...record })) }
+    return { ...person, records: person.records.map(record => ({ ...record })), changes: person.changes.map(change => ({ ...change, requestIds: [...change.requestIds] })) }
   },
 
   // 模拟 GUI 后端查询当前 PostgreSQL 入库记录，再返回 MinIO 图像链接。
   async getUserImage({ userId, feature, fingerPosition = null } = {}) {
     await delay()
     if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有图像查看权限')
-    const person = applicants.find(item => item.userId === userId)
-    const deleted = !person && logs.some(log => log.userId === userId && log.api === 'delete' && log.result === 'success')
+    const person = subjects.find(item => item.userId === userId)
     const record = person?.records.filter(item => item.feature === feature
       && (feature !== 'finger' || !fingerPosition || item.fingerPosition === fingerPosition))
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+    const deleted = !record && (person?.changes.some(change => change.operation === '删除' && change.feature === feature)
+      || (!person && logs.some(log => log.userId === userId && log.feature === feature && log.api === 'delete' && log.result === 'success')))
     return {
       userId, feature, fingerPosition: record?.fingerPosition ?? fingerPosition,
       status: deleted ? 'deleted' : record?.imageUrl ? 'available' : 'missing',
@@ -293,12 +317,13 @@ export default {
  *   'YYYY-MM-DD HH:mm:ss' 才成立。传 Date 对象或 'YYYY-MM-DD' 不报错，
  *   只会静默过滤掉全部记录 —— 调用方须先用 formatDateTime 归一化。
  */
-function filterLogs(list, { startTime, endTime, userId = '', requestId = '', api, feature, result, minCost, maxCost } = {}) {
+function filterLogs(list, { startTime, endTime, userId = '', requestId = '', requestIds = [], api, feature, result, minCost, maxCost } = {}) {
   const applicant = userId.trim()
   const request = requestId.trim()
   return list.map(projectRequest).filter((r) => {
     if (applicant && r.userId !== applicant) return false
     if (request && r.requestId !== request) return false
+    if (requestIds.length && !requestIds.includes(r.requestId)) return false
     if (startTime && r.calledAt < startTime) return false
     if (endTime && r.calledAt > endTime) return false
     if (api && r.api !== api) return false

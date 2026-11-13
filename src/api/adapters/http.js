@@ -57,6 +57,9 @@ export default {
   updateThresholds: notReady('updateThresholds'),
 
   getHealth: notReady('getHealth'),
+  getHostResources: notReady('getHostResources'),
+  getRecaptureScenario: notReady('getRecaptureScenario'),
+  setRecaptureScenario: notReady('setRecaptureScenario'),
 
   listLogs: notReady('listLogs'),
   listAudits: notReady('listAudits'),

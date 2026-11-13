@@ -23,7 +23,7 @@ const expand=async key=>{const node=stage(key),toggle=node.locator(':scope > .st
 const state=key=>stage(key).locator(':scope > .stage-toggle .stage-state').innerText()
 const duration=async()=>`请求${await drawer.getByTestId('request-duration').evaluate(el=>el.previousElementSibling.textContent==='已用时'?'已用时':'总耗时')} ${await drawer.getByTestId('request-duration').innerText()}`
 const response=()=>drawer.getByLabel('ABIS 响应 JSON')
-const showResponse=async()=>{const header=drawer.getByRole('button',{name:'响应结果',exact:true});if(await header.getAttribute('aria-expanded')==='false')await header.click();await drawer.locator('.request-response').scrollIntoViewIfNeeded()}
+const showResponse=async()=>{await drawer.getByRole('tab',{name:'接口报文',exact:true}).click();const header=drawer.getByRole('button',{name:'响应结果',exact:true});if(await header.getAttribute('aria-expanded')==='false')await header.click();await drawer.locator('.request-response').scrollIntoViewIfNeeded()}
 try{
  await page.goto(`${base}/login`);await page.locator('.login-content input').nth(0).fill('admin');await page.locator('.login-content input').nth(1).fill('admin123')
  await button('登录').click();await page.waitForURL('**/monitor');await loaded()
@@ -46,16 +46,16 @@ try{
  pass('business times increase and U001/U002/U003 filters return exactly 4/3/1 calls')
  await open(1)
  assert.deepEqual(await topStages().evaluateAll(ns=>ns.map(n=>n.dataset.stage)),['ADAPTER_RECEIVED','ADAPTER_CALLING','ADAPTER_RESPONDED'])
- assert.equal(await drawer.locator('.stage-events').count(),0);assert.equal(await response().isVisible(),false)
+ assert.equal(await drawer.locator('.stage-timeline > .timeline-step > .request-stage > .stage-events').count(),3);assert.equal(await response().isVisible(),false)
  assert.equal(await duration(),'请求总耗时 320 ms');assert.equal(await drawer.locator('[data-testid="processing-duration"]').innerText(),'180 ms')
  assert.deepEqual(await topStages().locator(':scope > .stage-toggle .stage-duration').allTextContents(),['20 ms','210 ms','40 ms'])
  assert.equal(await drawer.getByRole('heading',{name:'阶段概览',exact:true}).count(),0)
- assert.equal(await drawer.locator('.stage-metadata').count(),0)
+ assert.equal(await drawer.locator('.stage-metadata').count(),3)
  const metrics=await drawer.locator('[data-testid="request-duration"],[data-testid="processing-duration"]').evaluateAll(ns=>ns.map(n=>n.closest('tr').getBoundingClientRect().top));assert.equal(metrics[0],metrics[1])
  assert.equal(await drawer.getByRole('button',{name:'查看响应',exact:true}).count(),0)
  await page.screenshot({animations:'disabled',path:`${out}/drawer-default.png`})
  pass('default drawer shows side-by-side 320/180ms metrics, three compact 20/210/40ms stages and collapsed request/response messages')
- await stage('ADAPTER_CALLING').locator(':scope > .stage-toggle').focus();await page.keyboard.press('Enter');await stage('ABIS_HANDLING').waitFor()
+ await stage('ADAPTER_CALLING').locator(':scope > .stage-toggle').focus();await page.keyboard.press('Enter');await page.keyboard.press('Enter');await stage('ABIS_HANDLING').waitFor()
  assert.match(await stage('ABIS_HANDLING').locator(':scope > .stage-toggle .stage-duration').innerText(),/180 ms/)
  assert.match(await stage('ADAPTER_CALLING').locator(':scope > .stage-events > .stage-metadata').innerText(),/ADAPTER_CALLING/);assert.match(await stage('ADAPTER_CALLING').locator(':scope > .stage-events > .stage-metadata').innerText(),/\d{4}-\d{2}-\d{2}.*\.\d{3}/)
  const metadata=stage('ADAPTER_CALLING').locator(':scope > .stage-events > .stage-metadata')
@@ -93,7 +93,7 @@ try{
  pass('U002 registers then identifies candidate U001 and deletes only U002; candidate IDs remain solely in the response')
  await open(8);assert.match(await drawer.getByTestId('business-summary').innerText(),/待人工核查/);assert.equal(all[7].api,'enrollment');assert.equal(all[7].userId,'U003');assert.equal(all[7].currentStage,'ADAPTER_CALLING')
  assert.equal(await state('ADAPTER_CALLING'),'结果未知');await expand('ADAPTER_CALLING');assert.equal(await state('ABIS_HANDLING'),'结果未知')
- await stage('ADAPTER_CALLING').getByText('ABIS_TIMEOUT',{exact:true}).waitFor();await drawer.getByText('业务结果未确认',{exact:true}).waitFor();await drawer.getByText('暂无最终响应',{exact:true}).waitFor()
+ await stage('ADAPTER_CALLING').getByText('ABIS_TIMEOUT',{exact:true}).waitFor();await drawer.getByText('业务结果未确认，请人工核查。',{exact:true}).waitFor();await drawer.getByText('暂无最终响应',{exact:true}).waitFor()
  assert.equal(await drawer.getByRole('button',{name:'查看响应',exact:true}).count(),0);await showResponse();await drawer.getByText('暂无响应正文记录',{exact:true}).waitFor();assert.match(await duration(),/^请求已用时/)
  const elapsed=await drawer.locator('[data-testid="request-duration"]').textContent();await page.waitForFunction(p=>document.querySelector('[data-testid="request-duration"]').textContent!==p,elapsed)
  assert.deepEqual(all.filter(r=>r.userId==='U003').map(r=>r.api),['enrollment'])
@@ -212,7 +212,7 @@ try{
   assert.ok(await drawer.locator('.event-entry').evaluateAll(ns=>ns.every(n=>{const t=n.querySelector(':scope > .event-time').getBoundingClientRect(),dot=n.querySelector(':scope > .event-node').getBoundingClientRect();return t.right<=dot.left||t.left>=dot.right})),`time/node overlap ${width}`)
   if([1366,390,320].includes(width)){
    await page.screenshot({animations:'disabled',path:`${out}/drawer-${width}.png`})
-   await stage('ADAPTER_CALLING').scrollIntoViewIfNeeded();await page.screenshot({animations:'disabled',path:`${out}/timeline-${width}.png`})
+   await drawer.getByRole('tab',{name:'处理过程',exact:true}).click();await stage('ADAPTER_CALLING').scrollIntoViewIfNeeded();await page.screenshot({animations:'disabled',path:`${out}/timeline-${width}.png`})
    await stage('ABIS_HANDLING').scrollIntoViewIfNeeded();await page.screenshot({animations:'disabled',path:`${out}/handling-${width}.png`})
   }
   await close()

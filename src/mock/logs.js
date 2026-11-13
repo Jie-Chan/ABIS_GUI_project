@@ -61,6 +61,7 @@ function buildRequest(sample, index, base) {
   ])
   const record = {
     id: index + 1, requestId, mode, scenario,
+    relatedRequestIds: ({ 0: ['REQ-00000003'], 1: ['REQ-00000004'], 4: ['REQ-00000006'] })[index] || [],
     caller: mode === 'async' ? 'MOSIP-Adapter' : 'SIGATT-Portal', feature,
     result: 'success', publication: mode === 'sync' ? 'sync' : 'published', publishedAt: mode === 'sync' ? null : at(320),
     collectionDelayed: false, stages: mode === 'sync' ? [handling] : [received, calling, published],

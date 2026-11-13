@@ -4,7 +4,7 @@ import UiIcon from '@/components/UiIcon.vue'
 import { STAGE_LABEL, STAGE_STATUS_LABEL, STAGE_STATUS_TYPE, EVENT_STATUS_LABEL } from '@/constants/log'
 import { durationMs, formatDuration, formatLogTime, formatEventTime, formatStageTimeRange, handlingSpan, processingSpans, sortEvents, stageTimeline } from '@/utils/log'
 
-const props = defineProps({ stage: { type: Object, required: true }, requestId: { type: String, required: true }, compact: Boolean, defaultExpanded: Boolean, expandFailure: Boolean, locked: Boolean })
+const props = defineProps({ stage: { type: Object, required: true }, requestId: { type: String, required: true }, compact: Boolean, defaultExpanded: Boolean, expandFailure: Boolean, locked: Boolean, caller: {type:String,default:''} })
 const expanded = ref(props.defaultExpanded)
 const isHandling = computed(() => props.stage.key === 'ABIS_HANDLING')
 const span = computed(() => isHandling.value ? handlingSpan(props.stage) : props.stage)
@@ -23,10 +23,9 @@ function eventDescription(event) {
   <article class="request-stage" :data-stage="stage.key" :data-attempt="stage.attemptId" :class="{ 'needs-attention': attention, 'not-applicable': stage.applicable === false, 'compact-stage': compact }">
     <component :is="locked ? 'div' : 'button'" :type="locked ? undefined : 'button'" class="stage-toggle" :aria-expanded="expanded" :aria-controls="panelId" @click="!locked && (expanded = !expanded)">
       <span class="stage-heading">
-        <UiIcon class="stage-chevron" :class="{ expanded }" name="arrow" :size="16" />
         <span class="stage-name">{{ STAGE_LABEL[stage.key] }}</span>
         <el-tag class="stage-state" :type="stage.applicable === false ? 'info' : stage.retryPending ? 'warning' : STAGE_STATUS_TYPE[stage.status] || 'warning'">{{ statusLabel }}</el-tag>
-        <span class="stage-duration">{{ formatDuration(durationMs(span.startedAt, span.endedAt)) }}</span>
+        <span class="stage-duration">{{ formatDuration(durationMs(span.startedAt, span.endedAt)) }}</span><UiIcon class="stage-chevron" :class="{ expanded }" name="arrow" :size="16" />
       </span>
     </component>
     <div v-if="expanded" :id="panelId" class="stage-events">
@@ -39,7 +38,7 @@ function eventDescription(event) {
             <div class="event-content"><h4>接收请求</h4>
               <template v-for="event in events.filter(item => item.kind === 'RECEIVED')" :key="event.id">
                 <div class="event-heading"><el-tag size="small" :type="event.status === 'FAILED' ? 'danger' : 'success'">{{ EVENT_STATUS_LABEL[event.status] }}</el-tag></div>
-                <p class="entry-payload">用户 ID：{{ event.payload?.userId || '—' }}；接口类型：{{ event.payload?.api || '—' }}</p>
+                <p class="entry-payload">用户 ID：{{ event.payload?.userId || '—' }}；接口类型：{{ event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
                 <p v-if="event.errorCode">错误码：<code>{{ event.errorCode }}</code></p><p v-if="eventDescription(event)">{{ eventDescription(event) }}</p>
                 <p v-if="event.observedAt" class="late-event">采集时间 {{ formatLogTime(event.observedAt) }}，排序与耗时仍使用事件发生时间。</p>
               </template>
@@ -75,10 +74,10 @@ function eventDescription(event) {
           <time class="event-time" :datetime="entry.at || undefined" :title="formatLogTime(entry.at)">{{ formatEventTime(entry.at) }}</time>
           <span class="event-node" :class="{ 'event-node--handling': entry.type === 'handling' }" aria-hidden="true" />
           <div class="event-content">
-            <RequestLogStage v-if="entry.type === 'handling'" :stage="entry.stage" :request-id="requestId" compact :default-expanded="expandFailure && entry.stage.status === 'FAILED'" />
+            <RequestLogStage v-if="entry.type === 'handling'" :stage="entry.stage" :request-id="requestId" compact :caller="caller" />
             <template v-else>
               <div class="event-heading"><strong>{{ entry.event.action }}</strong><el-tag v-if="!['CALL_STARTED','PUBLISH_STARTED'].includes(entry.event.kind)" :type="entry.event.status === 'FAILED' ? 'danger' : entry.event.status === 'SUCCESS' ? 'success' : 'info'" size="small">{{ EVENT_STATUS_LABEL[entry.event.status] || '—' }}</el-tag><span v-if="['CALL_STARTED','PUBLISH_STARTED'].includes(entry.event.kind) && entry.event.attemptId" class="event-attempt">{{ entry.event.attemptId }}</span><span v-if="entry.event.note" class="event-note">{{ entry.event.note }}</span></div>
-              <p v-if="entry.event.kind === 'RECEIVED'" class="entry-payload">用户 ID：{{ entry.event.payload?.userId || '—' }}；接口类型：{{ entry.event.payload?.api || '—' }}</p>
+              <p v-if="entry.event.kind === 'RECEIVED'" class="entry-payload">用户 ID：{{ entry.event.payload?.userId || '—' }}；接口类型：{{ entry.event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
               <p v-if="entry.event.errorCode">错误码：<code>{{ entry.event.errorCode }}</code></p><p v-if="eventDescription(entry.event)">{{ eventDescription(entry.event) }}</p>
             </template>
           </div>
@@ -90,13 +89,13 @@ function eventDescription(event) {
 </template>
 
 <style scoped>
-.request-stage { margin-top: 12px; border: 1px solid var(--abis-border); border-radius: 8px; overflow: hidden; }
-.request-stage.needs-attention { border-color: #edc6a5; border-left: 3px solid #bc791d; }
-.stage-toggle { display: block; width: 100%; padding: 16px; border: 0; background: #f7f9fc; text-align: left; color: var(--el-text-color-primary); }
+.request-stage { margin-top: 0; border: 0; border-radius: 0; overflow: visible; }
+.request-stage.needs-attention { border:0; }
+.stage-toggle { display: block; width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid var(--abis-border); background: transparent; text-align: left; color: var(--el-text-color-primary); }
 .needs-attention > .stage-toggle { background: #fffbf5; }.stage-toggle:hover { background: #eef3fb; }
-.stage-heading { display: flex; align-items: center; gap: 10px; }.stage-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }
-.stage-state { flex-shrink: 0; }.stage-chevron.expanded { transform: rotate(90deg); }
-.stage-duration { color: var(--el-text-color-regular); font-size: 12px; white-space: nowrap; }.stage-events { padding: 18px 20px; border-top: 1px solid var(--abis-border); }
+.stage-heading { display: flex; align-items: center; gap: 8px; }.stage-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }
+.stage-state { flex-shrink: 0; min-width:64px; justify-content:center; }.stage-chevron.expanded { transform: rotate(90deg); }
+.stage-duration { color: var(--el-text-color-regular); font-size: 12px; white-space: nowrap; width:72px; text-align:right; flex-shrink:0; }.stage-events { padding: 12px 0 14px 10px; border-top: 0; }
 .event-timeline { margin: 0; padding: 0; list-style: none; }
 .event-entry { display: grid; grid-template-columns: 94px 14px minmax(0,1fr); column-gap: 10px; position: relative; padding-bottom: 22px; }
 .event-entry:last-child { padding-bottom: 0; }
@@ -119,7 +118,7 @@ code { color: var(--el-text-color-regular); overflow-wrap: anywhere; }h4 { margi
 .compact-stage .stage-name { font-size: 13px; }
 .compact-stage > .stage-events { margin-top: 14px; padding: 0 0 0 8px; border-top: 0; }
 @media(max-width:600px) {
-  .stage-toggle { padding: 12px; }.stage-events { padding: 14px 10px; }
+  .stage-toggle { padding: 9px 0; }.stage-events { padding: 12px 0; }.stage-state { min-width:52px; }.stage-duration { width:55px; }
   .event-entry { grid-template-columns: 82px 10px minmax(0,1fr); column-gap: 7px; }.event-entry::before { left: 93.5px; }
   .event-time { font-size: 10px; }.stage-name { font-size: 13px; }.compact-stage > .stage-events { padding-left: 0; }
   .compact-stage .event-entry { grid-template-columns: minmax(0,1fr); row-gap: 6px; padding-left: 10px; }

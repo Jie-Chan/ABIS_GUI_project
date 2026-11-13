@@ -26,8 +26,11 @@ function handleAccountCommand(command) {
 }
 
 const navItems = computed(() => NAV_ITEMS.filter((item) => auth.hasPermission(item.permission)))
+const monitorPages = new Set(['monitor', 'host-resources'])
+const monitorNavItems = computed(() => navItems.value.filter(item => monitorPages.has(item.name)))
+const isMonitorPage = computed(() => monitorPages.has(route.name))
 const settingsPages = new Set(['threshold', 'accounts'])
-const primaryNavItems = computed(() => navItems.value.filter((item) => !settingsPages.has(item.name)))
+const primaryNavItems = computed(() => navItems.value.filter((item) => !settingsPages.has(item.name) && !monitorPages.has(item.name)))
 const settingsNavItems = computed(() => navItems.value.filter((item) => settingsPages.has(item.name)))
 const isSettingsPage = computed(() => settingsPages.has(route.name))
 
@@ -67,6 +70,10 @@ async function handleLogout() {
         <BrandMark /><strong>ABIS</strong><span>{{ title.replace(/^ABIS\s*/, '') }}</span>
       </div>
       <nav class="primary-navigation" aria-label="控制台导航">
+        <el-dropdown v-if="monitorNavItems.length" trigger="click" popper-class="settings-menu monitor-menu" @command="name => router.push({ name })">
+          <button class="settings-trigger monitor-trigger" :class="{ 'is-active': isMonitorPage }" type="button"><UiIcon name="monitor" /><span>监控</span><UiIcon class="settings-chevron" name="arrow" :size="12" /></button>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="item in monitorNavItems" :key="item.name" :command="item.name" :class="{ 'is-active': route.name === item.name }">{{ item.label }}</el-dropdown-item></el-dropdown-menu></template>
+        </el-dropdown>
         <el-menu :default-active="route.name" mode="horizontal" :ellipsis="false" menu-trigger="click" router>
           <el-menu-item v-for="item in primaryNavItems" :key="item.name" :index="item.name" :route="{ name: item.name }">
             <UiIcon :name="item.name" /><span>{{ item.label }}</span>
@@ -105,7 +112,7 @@ async function handleLogout() {
 
     <el-main class="workspace-main">
       <div v-if="isSettingsPage" class="breadcrumb" aria-label="当前位置"><span>设置</span><b>/</b><strong>{{ currentTitle }}</strong></div>
-      <div v-if="!['logs', 'applicants', 'monitor', 'audits'].includes(route.name)" class="page-intro">
+      <div v-if="!['logs', 'applicants', 'monitor', 'host-resources', 'audits'].includes(route.name)" class="page-intro">
         <span class="page-icon"><UiIcon :name="route.name" :size="25" /></span>
         <div>
           <h1>{{ currentTitle }}</h1>
