@@ -8,6 +8,8 @@ import { ROLE, ROLE_LABEL, PERMISSION, canResetAccountPassword, canDeleteAccount
 import { buildConfirmationMessage } from '@/utils/confirmation'
 import { optionalAccountFields } from '@/utils/account'
 import { CONFIRM_TITLE } from '@/constants/nav'
+import { useRecordsTable } from '@/composables/useRecordsTable'
+import RecordsFooter from '@/components/RecordsFooter.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -16,13 +18,14 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const rows = ref([])
+const { tableRef, tableMaxHeight } = useRecordsTable(rows)
 const total = ref(0)
 const query = ref({ page: 1, pageSize: 10, keyword: '' })
 let requestSequence = 0
 
 const dialogVisible = ref(false)
 const dialogMode = ref('create')
-const emptyForm = () => ({ id: null, username: '', displayName: '', role: ROLE.OPERATOR, ...optionalAccountFields() })
+const emptyForm = () => ({ id: null, username: '', displayName: '', role: ROLE.OPERATOR, ...optionalAccountFields(undefined, { emptyValue: '' }) })
 const form = ref(emptyForm())
 const editTarget = ref(null)
 const canEditRole = computed(() => dialogMode.value === 'create' || canChangeAccountRole(auth.role, editTarget.value?.role, auth.account?.id, editTarget.value?.id))
@@ -61,6 +64,16 @@ function search() {
   load()
 }
 
+function changePage(page) {
+  query.value.page = page
+  load()
+}
+
+function changePageSize(pageSize) {
+  query.value.pageSize = pageSize
+  search()
+}
+
 async function reloadAfterWrite() {
   await load()
   if (!error.value && !rows.value.length && total.value > 0 && query.value.page > 1) {
@@ -81,7 +94,7 @@ function openEdit(row) {
   if (!canManage.value) return
   dialogMode.value = 'edit'
   editTarget.value = { id: row.id, role: row.role }
-  form.value = { ...row, ...optionalAccountFields(row) }
+  form.value = { ...row, ...optionalAccountFields(row, { emptyValue: '' }) }
   dialogVisible.value = true
 }
 
@@ -204,7 +217,7 @@ async function handleDelete(row) {
 
 async function handleResetPassword(row) {
   if (!canReset(row)) return
-  if (!await confirmAction(buildConfirmationMessage(`确认重置账户「${row.username}」的密码？`, ['操作结果将在密码结果弹窗中显示。']))) return
+  if (!await confirmAction(buildConfirmationMessage(`确认重置账户「${row.username}」的密码？`, []))) return
   saving.value = true
   try {
     const result = await api.resetPassword(row.id)
@@ -231,16 +244,16 @@ onMounted(load)
   <div class="account-page">
     <el-card>
       <template #header>
-        <div class="record-heading"><span>控制台账户</span><span class="record-count">共 {{ total }} 个账户</span></div>
+        <h1 class="account-title">账户管理</h1>
       </template>
       <el-alert v-if="error" :title="error" type="error" :closable="false" style="margin-bottom: 12px" />
       <div class="toolbar">
-        <el-input v-model="query.keyword" placeholder="搜索用户名或姓名" clearable style="width: 240px" @keyup.enter="search" @clear="search" />
+        <el-input v-model="query.keyword" placeholder="搜索用户名或姓名" clearable class="account-search" @keyup.enter="search" @clear="search" />
         <el-button type="primary" :loading="loading" @click="search">查询</el-button>
         <span class="spacer" />
         <el-button v-if="canManage" type="primary" :disabled="saving" @click="openCreate">新建账户</el-button>
       </div>
-      <el-table :data="rows" row-key="id" v-loading="loading" border style="width: 100%">
+      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" row-key="id" v-loading="loading" border style="width: 100%" :empty-text="error ? '查询失败，请重试' : '暂无匹配账户'">
         <el-table-column prop="id" label="账户 ID" min-width="90" />
         <el-table-column prop="username" label="用户名" min-width="160">
           <template #default="{ row }"><div class="account-name">{{ row.username }}</div><div class="account-display-name">{{ row.displayName || '—' }}</div></template>
@@ -281,8 +294,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination v-model:current-page="query.page" v-model:page-size="query.pageSize" :total="total" :page-sizes="[10, 20, 50]" layout="total, sizes, prev, pager, next" style="margin-top: 12px; justify-content: flex-end" @current-change="load" @size-change="search" />
-      <p class="note">账户操作记录可在审计查询中查看。</p>
+      <RecordsFooter :current-page="query.page" :page-size="query.pageSize" :total="total" :page-sizes="[10, 20, 50]" @update:current-page="changePage" @update:page-size="changePageSize" />
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="dialogMode === 'create' ? '新建账户' : '编辑账户'" width="460px" :close-on-click-modal="!saving" :show-close="!saving" :close-on-press-escape="!saving" @closed="form = emptyForm()">
@@ -293,9 +305,9 @@ onMounted(load)
           <el-select v-model="form.role" :disabled="!canEditRole" style="width: 100%"><el-option v-for="o in roleOptions" :key="o.value" :label="o.label" :value="o.value" /></el-select>
           <span v-if="dialogMode === 'edit' && !canEditRole" class="role-hint">本人及管理员账户的角色不可修改。</span>
         </el-form-item>
-        <el-form-item label="电话" prop="phone"><el-input v-model="form.phone" type="tel" placeholder="-" /></el-form-item>
-        <el-form-item label="邮箱" prop="email"><el-input v-model="form.email" placeholder="-" /></el-form-item>
-        <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" placeholder="-" /></el-form-item>
+        <el-form-item label="电话" prop="phone"><el-input v-model="form.phone" type="tel" placeholder="选填" /></el-form-item>
+        <el-form-item label="邮箱" prop="email"><el-input v-model="form.email" placeholder="选填" /></el-form-item>
+        <el-form-item label="备注" prop="remark"><el-input v-model="form.remark" type="textarea" :rows="3" placeholder="选填" /></el-form-item>
       </el-form>
       <template #footer><el-button :disabled="saving" @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button></template>
     </el-dialog>
@@ -313,17 +325,23 @@ onMounted(load)
 </template>
 
 <style scoped>
+.account-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+.account-page > :deep(.el-card > .el-card__header) { padding: 14px 20px; }
+.account-page > :deep(.el-card > .el-card__body) { padding: 16px 20px; }
+.account-page :deep(.el-table td.el-table__cell) { padding-block: 10px; }
 .account-name { overflow-wrap: anywhere; }
 .account-display-name { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .status-action { display: inline-flex; margin: 0 12px; }
 .status-action:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; }
 :global(.account-delete-action) { color: var(--el-color-danger) !important; }
-.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.account-search { width: 240px; max-width: 100%; }
 .spacer { flex: 1; }
 .note { margin: 18px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
 .role-hint { color: #718096; font-size: 12px; line-height: 1.8; margin-top: 4px; }
 .account-page .el-button.account-status-locked.is-disabled { color: var(--el-text-color-placeholder); }
 @media (max-width: 767px) {
+  .account-page > :deep(.el-card > .el-card__header), .account-page > :deep(.el-card > .el-card__body) { padding-inline: 16px; }
   .account-page :deep(.el-table-fixed-column--right) { position: static !important; }
   .account-page :deep(.el-table-fixed-column--right::before) { display: none; }
 }

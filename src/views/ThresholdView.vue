@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRoute, onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -13,12 +13,9 @@ import {
   DEFAULT_THRESHOLDS,
   buildLowerBoundMessage,
   allowsBelowLowerBound,
-  lowerBoundAlertType,
 } from '@/constants/threshold'
 
-const route = useRoute()
 const auth = useAuthStore()
-const title = computed(() => route.meta.title || '')
 const loading = ref(false)
 const saving = ref(false)
 const confirming = ref(false)
@@ -31,6 +28,7 @@ const origin = ref({ face: null, finger: null })
 
 const dirty = computed(() => hasLoaded.value && THRESHOLD_KEYS.some(({ key }) => form.value[key] !== origin.value[key]))
 const busy = computed(() => loading.value || saving.value || confirming.value)
+const valid = computed(() => THRESHOLD_KEYS.every(({ key, protocolLowerBound }) => Number.isInteger(form.value[key]) && form.value[key] >= protocolLowerBound && form.value[key] <= THRESHOLD_MAX))
 const writeBlocked = computed(() => busy.value || recoveryRequired.value || !hasLoaded.value)
 
 // 当前 InputNumber 仅在挂载时设置 aria-disabled，动态恢复可编辑后需同步给辅助技术。
@@ -164,23 +162,10 @@ onMounted(load)
 <template>
   <div>
     <el-card v-loading="loading">
-      <template #header>
-        <div class="record-heading"><span>{{ title }}</span><el-tag type="info" size="small">1:N 去重</el-tag></div>
-      </template>
-
       <el-alert
         v-if="error"
         :title="error"
         type="error"
-        :closable="false"
-        style="margin-bottom: 12px"
-      />
-
-      <el-alert
-        v-for="hint in lowerBoundHints"
-        :key="hint.key"
-        :title="hint.text"
-        :type="lowerBoundAlertType()"
         :closable="false"
         style="margin-bottom: 12px"
       />
@@ -197,18 +182,20 @@ onMounted(load)
             :disabled="writeBlocked"
           />
           <span class="bound">协议生效下限：{{ k.protocolLowerBound }}</span>
+          <span v-if="lowerBoundHints.find(hint => hint.key === k.key)" class="field-error" role="alert">{{ lowerBoundHints.find(hint => hint.key === k.key).text }}</span>
         </el-form-item>
 
         <el-form-item class="threshold-actions">
-          <el-button type="primary" :loading="saving" :disabled="writeBlocked || !dirty" @click="handleSave">保存修改</el-button>
-          <el-button :disabled="writeBlocked" @click="handleReset">恢复默认值（60/60）</el-button>
+          <el-button type="primary" :loading="saving" :disabled="writeBlocked || !dirty || !valid" @click="handleSave">保存修改</el-button>
+          <el-button :disabled="writeBlocked" @click="handleReset">填入默认值</el-button>
+          <span class="bound default-hint">保存后生效</span>
           <span v-if="recoveryRequired" class="edit-state" role="status">配置待确认</span>
           <span v-else-if="dirty" class="edit-state" role="status">未保存</span>
         </el-form-item>
       </el-form>
 
       <p class="note">
-        配置默认 1:N 去重阈值；调用方传入阈值时以请求为准。
+        调用方指定阈值时，以请求值为准。
       </p>
     </el-card>
   </div>
@@ -222,6 +209,7 @@ onMounted(load)
 .threshold-field :deep(.el-input-number) { width: 180px; max-width: 100%; }
 .threshold-field :deep(.el-input__inner) { font-size: 20px; font-weight: 600; }
 .threshold-field :deep(.el-input__wrapper) { height: 44px; }
+.field-error { color: var(--el-color-danger); font-size: 12px; line-height: 1.7; }.default-hint { margin-left: 12px; }
 .bound { color: #718096; font-size: 11px; }
 .edit-state { margin-left: 12px; color: var(--el-color-warning); font-size: 13px; }
 .threshold-actions :deep(.el-form-item__content) { gap: 8px 0; }

@@ -1,4 +1,4 @@
-import { buildLogRecords } from '@/mock/logs'
+import { buildLogRecords, buildSupplementalLogRecords } from '@/mock/logs'
 import { buildHistoricalRegistrations } from '@/mock/history'
 import { buildDocumentRecaptureLogs } from '@/mock/recapture'
 import { buildEnrollmentSubjects } from '@/mock/applicants'
@@ -7,7 +7,7 @@ import { buildEnrollmentSubjects } from '@/mock/applicants'
 export function buildBusinessSnapshot() {
   const samples = buildLogRecords()
   const recaptured = buildDocumentRecaptureLogs().filter(log => ['U301', 'U302'].includes(log.userId)).map(log => ({ ...log, historical: true }))
-  const logs = [...samples, ...buildHistoricalRegistrations(samples), ...recaptured]
+  const logs = [...samples, ...buildHistoricalRegistrations(samples), ...recaptured, ...buildSupplementalLogRecords()]
   const subjects = buildEnrollmentSubjects(logs)
   return { logs, subjects, applicants: subjects.filter(person => person.faceCount > 0) }
 }

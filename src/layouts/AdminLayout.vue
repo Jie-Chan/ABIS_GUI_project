@@ -8,9 +8,7 @@ import { NAV_ITEMS, APP_NAME } from '@/constants/nav'
 import BrandMark from '@/components/BrandMark.vue'
 import UiIcon from '@/components/UiIcon.vue'
 import ProfileDialog from '@/components/ProfileDialog.vue'
-import DataSourceBadge from '@/components/DataSourceBadge.vue'
 import { buildConfirmationMessage } from '@/utils/confirmation'
-import { PAGE_DESCRIPTIONS } from '@/constants/presentation'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +31,7 @@ const settingsPages = new Set(['threshold', 'accounts'])
 const primaryNavItems = computed(() => navItems.value.filter((item) => !settingsPages.has(item.name) && !monitorPages.has(item.name)))
 const settingsNavItems = computed(() => navItems.value.filter((item) => settingsPages.has(item.name)))
 const isSettingsPage = computed(() => settingsPages.has(route.name))
+const isRecordsPage = computed(() => ['applicants', 'logs', 'audits', 'accounts'].includes(route.name))
 
 const currentTitle = computed(() => route.meta.title || '')
 const roleLabel = computed(() => ROLE_LABEL[auth.role] || '角色未识别')
@@ -94,7 +93,6 @@ async function handleLogout() {
         </el-dropdown>
       </nav>
       <div class="user">
-        <DataSourceBadge />
         <el-dropdown trigger="click" popper-class="account-menu" @command="handleAccountCommand">
           <button class="account-trigger" type="button" aria-label="账户菜单" :title="`${displayName}（${roleLabel}）`">
             <span class="avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
@@ -111,13 +109,12 @@ async function handleLogout() {
       </div>
     </el-header>
 
-    <el-main class="workspace-main">
-      <div v-if="isSettingsPage" class="breadcrumb" aria-label="当前位置"><span>设置</span><b>/</b><strong>{{ currentTitle }}</strong></div>
-      <div v-if="!['logs', 'applicants', 'monitor', 'host-resources', 'audits'].includes(route.name)" class="page-intro">
+    <el-main class="workspace-main" :class="{ 'records-workspace': isRecordsPage }">
+      <div v-if="isSettingsPage && route.name !== 'accounts'" class="breadcrumb" aria-label="当前位置"><span>设置</span><b>/</b><strong>{{ currentTitle }}</strong></div>
+      <div v-if="!['logs', 'applicants', 'monitor', 'host-resources', 'audits', 'accounts', 'recapture-acceptance'].includes(route.name)" class="page-intro">
         <span class="page-icon"><UiIcon :name="route.name" :size="25" /></span>
         <div>
           <h1>{{ currentTitle }}</h1>
-          <p>{{ PAGE_DESCRIPTIONS[route.name] }}</p>
         </div>
       </div>
       <el-alert v-if="auth.account?.identityPending" title="当前账户角色未识别，仅允许查看数据。" type="info" :closable="false" style="margin-bottom: 12px" />
@@ -194,6 +191,10 @@ async function handleLogout() {
   .page-intro p { font-size: 12px; }
   .page-intro { gap: 12px; margin-bottom: 20px; }
   .page-icon { width: 42px; height: 42px; border-radius: 10px; }
+}
+.workspace-main.records-workspace { --abis-workspace-top: 12px; padding-top: var(--abis-workspace-top); }
+@media (max-width: 767px) {
+  .workspace-main.records-workspace { --abis-workspace-top: 8px; }
 }
 .user :deep(.source-badge) { flex-shrink: 0; }
 </style>

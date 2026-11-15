@@ -39,7 +39,7 @@
 /**
  * @typedef {Object} EnrollmentRecord
  * @property {string} userId 完整业务对象 ID
- * @property {string} recordId 当前有效入库记录 ID
+ * @property {string} [recordId] Mock 内部组织图像记录用的编号，不展示或作为正式接口、数据库的新增字段要求；正式取图复用 userId、模态、指位及已有存储引用
  * @property {'face'|'finger'} feature
  * @property {number|null} [qualityScore] 图像记录质量分，0 为有效值，缺失不推断
  * @property {string|null} [fingerPosition] 指位枚举；缺失显示指位未标注
@@ -73,7 +73,7 @@
  * @property {string} key
  * @property {string} name
  * @property {MonitorHost} [host] 算法分组共用的 VM
- * @property {Array<{id: string, name?: string, status: 'normal'|'abnormal'|'unknown', host?: MonitorHost}>} instances 按实例统计，未知仍计入总数
+ * @property {Array<{id: string, name?: string, status: 'normal'|'abnormal'|'unknown', host?: MonitorHost, lastProbeAt?: string|null, reason?: string|null}>} instances 按实例统计，最近探测及原因来自该实例，缺失不使用全局更新时间填充
  * @property {MonitorMetrics} [metrics]  可选原始指标，当前监控界面不展示授权或底库信息
  *
  * ⚠ metrics **不保证存在**：非算法服务对象上它可能是缺失的键，
@@ -197,6 +197,7 @@
  * @property {string} [api]       LOG_APIS 的 key（comparison / verification / identification / enrollment / delete）
  * @property {'face'|'finger'} [feature]
  * @property {'success'|'failure'|'running'|'waiting'|'unknown'} [result]
+ * @property {'published'|'pending'|'none'} [publication] 留空时同步和异步均参与；指定时仅匹配对应异步请求
  * @property {number} [minCost] 只筛选已完成且总耗时有效的请求
  * @property {number} [maxCost] 同上
  */
@@ -228,7 +229,7 @@
  * @property {(params?: PageParams & {keyword?: string}) => Promise<{total: number, items: Account[]}>} listAccounts
  * @property {(params?: ApplicantQueryParams) => Promise<{total: number, items: Applicant[]}>} listApplicants 当前库内按 userId 去重的人员，不能从调用日志推算
  * @property {(userId: string) => Promise<Applicant & {records: EnrollmentRecord[]}>} getApplicant
- * @property {(query: {userId: string, feature: 'face'|'finger', fingerPosition?: string|null}) => Promise<{userId: string, feature: string, fingerPosition: string|null, status: 'available'|'missing'|'deleted', recordId: string|null, imageUrl: string|null}>} getUserImage 按当前有效入库记录查询图像；仅明确删除时返回 deleted，临时读取失败抛错。真实 GUI 后端取图接口待对接。
+ * @property {(query: {userId: string, feature: 'face'|'finger', fingerPosition?: string|null}) => Promise<{userId: string, feature: string, fingerPosition: string|null, status: 'available'|'missing'|'deleted', recordId?: string|null, imageUrl: string|null}>} getUserImage 按当前有效入库记录查询图像；仅明确删除时返回 deleted，临时读取失败抛错。真实 GUI 后端取图接口待对接。
  * @property {(payload: {username: string, displayName: string, role: 'admin'|'operator', phone?: string, email?: string, remark?: string}) => Promise<Account & {initialPassword?: string}>} createAccount
  * @property {(id: number, payload: Partial<Account>) => Promise<Account>} updateAccount
  * @property {(id: number) => Promise<void>} deleteAccount
@@ -240,7 +241,7 @@
  * @property {() => Promise<{scenario: RecaptureScenario, userId: string}>} getRecaptureScenario 仅 Mock；HTTP 适配器明确拒绝
  * @property {(scenario: RecaptureScenario) => Promise<{scenario: RecaptureScenario, userId: string}>} setRecaptureScenario 仅 Mock；切换当前会话的共享业务快照，default 恢复 15 条日志
  * @property {(params?: LogQueryParams) => Promise<{total: number, items: LogRecord[]}>} listLogs
- * @property {(params?: AuditQueryParams) => Promise<{total: number, items: AuditRecord[]}>} listAudits
+ * @property {(params?: AuditQueryParams) => Promise<{total: number, items: AuditRecord[], demoDateRange?: {start: string, end: string}}>} listAudits demoDateRange 为全部 Mock 样例的日期覆盖范围，独立于当前筛选
  * @property {(params?: LogQueryParams) => Promise<Blob>} exportLogs
  * @property {(params?: AuditQueryParams) => Promise<Blob>} exportAudits
  */

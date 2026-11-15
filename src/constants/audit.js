@@ -1,5 +1,6 @@
 /** 审计动作及筛选选项。 */
 export const AUDIT_ACTION = {
+  LOGIN: '登录',
   LOGIN_SUCCESS: '登录成功',
   LOGIN_FAILED: '登录失败',
   LOGOUT: '登出',
@@ -10,4 +11,7 @@ export const AUDIT_ACTION = {
 }
 
 /** 下拉选项顺序 */
-export const AUDIT_ACTIONS = Object.values(AUDIT_ACTION)
+export function normalizeAuditAction(action) {
+  return [AUDIT_ACTION.LOGIN_SUCCESS, AUDIT_ACTION.LOGIN_FAILED].includes(action) ? AUDIT_ACTION.LOGIN : action
+}
+export const AUDIT_ACTIONS = [...new Set(Object.values(AUDIT_ACTION).map(normalizeAuditAction))]

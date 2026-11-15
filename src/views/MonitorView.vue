@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useMonitorStore } from '@/stores/monitor'
 import { monitorState, MONITOR_STATUS_META } from '@/constants/monitor'
+import MonitorProbe from '@/components/MonitorProbe.vue'
 import UiIcon from '@/components/UiIcon.vue'
 
 const store = useMonitorStore()
@@ -46,6 +47,7 @@ onUnmounted(() => store.stop())
             <li v-for="instance in group.instances" :key="instance.id" class="instance-row" :data-instance="instance.id">
               <div class="instance-identity"><span v-if="instance.name" class="instance-name">{{ instance.name }}</span><span class="instance-id">{{ instance.id }}</span><span v-if="instance.host" class="deployment-info">{{ instance.host.name }} · {{ instance.host.ip }}</span></div>
               <span class="instance-state" :class="MONITOR_STATUS_META[monitorState(instance.status)].tagType">{{ MONITOR_STATUS_META[monitorState(instance.status)].label }}</span>
+              <MonitorProbe v-if="monitorState(instance.status) !== 'normal'" :instance="instance" :host="instance.host || group.host" />
             </li>
           </ul>
         </article>
@@ -58,7 +60,7 @@ onUnmounted(() => store.stop())
           <tbody><tr v-for="instance in storageRows" :key="instance.id" class="instance-row storage-row" :data-instance="instance.id">
             <td>{{ instance.component }}</td><td class="instance-id">{{ instance.id }}</td>
             <td class="instance-identity"><span>{{ instance.host?.name || '—' }}</span><span class="deployment-info">{{ instance.host?.ip || '—' }}</span></td>
-            <td><span class="instance-state" :class="MONITOR_STATUS_META[monitorState(instance.status)].tagType">{{ MONITOR_STATUS_META[monitorState(instance.status)].label }}</span></td>
+            <td><span class="instance-state" :class="MONITOR_STATUS_META[monitorState(instance.status)].tagType">{{ MONITOR_STATUS_META[monitorState(instance.status)].label }}</span><MonitorProbe v-if="monitorState(instance.status) !== 'normal'" :instance="instance" :host="instance.host" /></td>
           </tr></tbody>
         </table>
       </section>
@@ -70,7 +72,7 @@ onUnmounted(() => store.stop())
 
 <style scoped>
 .monitor-page { container-type: inline-size; container-name: monitor; }
-.status-overview { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin: 0 0 16px; padding: 16px 0; background: #fff; border: 1px solid var(--abis-border); border-radius: 8px; }
+.status-overview { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin: 0 0 16px; padding: 12px 0; background: #fff; border: 1px solid var(--abis-border); border-radius: 8px; }
 .summary-card { position: relative; display: flex; align-items: center; gap: 12px; padding: 0 20px; min-width: 0; border-right: 1px solid var(--abis-border); }
 .summary-card:last-child { border: 0; }
 .summary-filter { position: absolute; inset: -8px 6px; border: 0; border-radius: 6px; background: transparent; }
@@ -88,12 +90,13 @@ onUnmounted(() => store.stop())
 .service-grid--1 { grid-template-columns: minmax(0,1fr); }
 .service-grid--2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .service-card { min-width: 0; border: 1px solid var(--abis-border); border-radius: 8px; background: #f9fbfd; overflow: hidden; }
-.service-heading { display: grid; grid-template-columns: 20px minmax(0,1fr); align-content: center; align-items: center; gap: 6px 8px; min-height: 72px; padding: 12px 14px; box-sizing: border-box; border-bottom: 1px solid var(--abis-border); color: #536b87; }
+.service-heading { display: grid; grid-template-columns: 20px minmax(0,1fr); align-content: center; align-items: center; gap: 6px 8px; min-height: 64px; padding: 10px 14px; box-sizing: border-box; border-bottom: 1px solid var(--abis-border); color: #536b87; }
 .service-heading .deployment-info { grid-column: 2; margin: 0; }
 .deployment-info { font-size: 12px; line-height: 1.5; color: var(--abis-muted); overflow-wrap: anywhere; }
 .service-heading h3 { margin: 0; color: var(--el-text-color-primary); font-size: 15px; font-weight: 600; }
 .service-instances { margin: 0; padding: 0 14px; list-style: none; }
-.instance-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 70px; box-sizing: border-box; padding: 10px 0; border-bottom: 1px solid var(--abis-border); }
+.instance-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; min-height: 60px; box-sizing: border-box; padding: 8px 0; border-bottom: 1px solid var(--abis-border); }
+.instance-row > .probe-info { flex: 0 0 100%; }.storage-table .probe-info { margin-top: 5px; }
 .instance-row:last-child { border-bottom: 0; }
 .instance-identity { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
 .instance-name { font-size: 13px; }
@@ -103,8 +106,8 @@ onUnmounted(() => store.stop())
 .storage-section { margin-top: 16px; background: #fff; border: 1px solid var(--abis-border); border-radius: 8px; overflow: hidden; }
 .storage-section h3 { margin: 0; padding: 12px 14px; font-size: 15px; }
 .storage-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
-.component-column { width: 18%; }.instance-column { width: 26%; }.state-column { width: 70px; }
-.storage-table th,.storage-table td { padding: 10px 14px; border-top: 1px solid var(--abis-border); text-align: left; overflow-wrap: anywhere; line-height: 1.5; }
+.component-column { width: 16%; }.instance-column { width: 20%; }.state-column { width: 34%; }
+.storage-table th,.storage-table td { padding: 8px 14px; border-top: 1px solid var(--abis-border); text-align: left; overflow-wrap: anywhere; line-height: 1.5; }
 .storage-table th { font-size: 12px; color: #62748d; font-weight: 500; background: #f7f9fc; }
 .storage-table .storage-row { display: table-row; padding: 0; min-height: 0; border: 0; }
 .storage-table .instance-identity { display: table-cell; }
@@ -126,6 +129,6 @@ onUnmounted(() => store.stop())
   .service-grid--3 .service-card:last-child .instance-row:first-child { border-bottom: 1px solid var(--abis-border); }
   .refresh-area { gap: 8px; }
   .storage-table th,.storage-table td { padding: 9px 6px; font-size: 12px; }
-  .component-column { width: 24%; }.instance-column { width: 26%; }.state-column { width: 42px; }
+  .component-column { width: 18%; }.instance-column { width: 21%; }.state-column { width: 35%; }
 }
 </style>

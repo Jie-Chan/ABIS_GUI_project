@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import { isMockPreview } from '@/constants/presentation'
 import { ROLE_LABEL } from '@/constants/roles'
 import { buildConfirmationMessage } from '@/utils/confirmation'
 import { optionalAccountText } from '@/utils/account'
@@ -117,8 +116,7 @@ async function savePassword() {
         </el-form-item>
         <el-form-item label="确认新密码" prop="confirmPassword"><el-input v-model="password.confirmPassword" type="password" show-password placeholder="请再次输入新密码" autocomplete="new-password" @keyup.enter="savePassword" /></el-form-item>
       </el-form>
-      <p class="password-note">验证原密码后修改本人密码，修改成功后请重新登录。</p>
-      <p v-if="isMockPreview" class="password-note">Mock 修改仅在本次预览中有效，刷新页面后恢复演示密码。</p>
+      <p class="password-note">修改成功后请重新登录。</p>
     </section>
     </el-tab-pane>
     </el-tabs>

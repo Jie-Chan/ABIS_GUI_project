@@ -84,11 +84,11 @@ try {
     assert.equal(await page.getByText('obsolete-failure', { exact: true }).count(), 0)
     await button('查询').click()
     await page.evaluate(() => window.pendingQueries[4].reject(new Error('模拟查询失败')))
-    await page.getByText('查询失败，请重试', { exact: true }).waitFor()
-    assert.equal(await page.locator('.el-table__row').count(), 0)
+    await page.locator('.query-panel .el-alert').filter({ hasText: '模拟查询失败' }).waitFor()
+    assert.equal(await page.locator('.el-table__row').count(), 1)
     await page.evaluate(async method => { (await import('/src/api/index.js')).default[method] = window.originalQuery }, method)
     await button('查询').click(); await loaded()
-    pass(`${path}: older success/failure cannot overwrite new results or loading; current failures clear old records`)
+    pass(`${path}: older success/failure cannot overwrite new results or loading; current failures retain the last applied result`)
   }
 
   await go('/accounts')
@@ -146,7 +146,7 @@ try {
     window.thresholdWrites = []
     api.updateThresholds = async value => { window.thresholdWrites.push({ ...value }); return save(value) }
   })
-  await button('恢复默认值（60/60）').click()
+  await button('填入默认值').click()
   assert.equal(await page.evaluate(() => window.thresholdWrites.length), 0)
   assert.deepEqual(await page.locator('.threshold-field input').evaluateAll(inputs => inputs.map(input => input.value)), ['60', '60'])
   await button('保存修改').click(); await confirm('取消')
@@ -156,7 +156,7 @@ try {
   await button('保存修改').click(); await confirm('确定'); await loaded()
   assert.deepEqual(await page.evaluate(() => window.thresholdWrites), [{ face: 60, finger: 60 }])
   assert.ok(await button('保存修改').isDisabled())
-  await button('恢复默认值（60/60）').click(); assert.ok(await button('保存修改').isDisabled())
+  await button('填入默认值').click(); assert.ok(await button('保存修改').isDisabled())
   pass('defaults fill without requests; cancelling and leaving preserve edits; only explicit save writes and clears dirty state')
   await page.evaluate(async () => {
     const api = (await import('/src/api/index.js')).default
@@ -166,7 +166,7 @@ try {
   await page.locator('.threshold-field input').first().fill('70'); await page.locator('.threshold-field input').first().blur()
   await button('保存修改').click(); await confirm('确定')
   await page.getByText('配置待确认', { exact: true }).waitFor()
-  assert.ok(await button('保存修改').isDisabled()); assert.ok(await button('恢复默认值（60/60）').isDisabled())
+  assert.ok(await button('保存修改').isDisabled()); assert.ok(await button('填入默认值').isDisabled())
   await go('/logs'); await go('/threshold')
   assert.ok(await page.locator('.threshold-field input').first().isEnabled())
   await go('/logs')

@@ -39,8 +39,8 @@ export function buildAuditRecords(total = 64) {
   const base = new Date('2026-09-14T08:30:00')
 
   for (let i = 0; i < total; i += 1) {
-    const operator = OPERATORS[i % OPERATORS.length]
     const spec = ACTIONS[i % ACTIONS.length]
+    const operator = [AUDIT_ACTION.CREATE_ACCOUNT, AUDIT_ACTION.DISABLE_ACCOUNT].includes(spec.action) ? OPERATORS[0] : OPERATORS[i % OPERATORS.length]
     const operatedAt = new Date(base.getTime() - i * 11 * 60 * 1000)
 
     records.push({

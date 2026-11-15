@@ -1,10 +1,10 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import UiIcon from '@/components/UiIcon.vue'
 import { STAGE_LABEL, STAGE_STATUS_LABEL, STAGE_STATUS_TYPE, EVENT_STATUS_LABEL } from '@/constants/log'
 import { durationMs, formatDuration, formatLogTime, formatEventTime, formatStageTimeRange, handlingSpan, processingSpans, sortEvents, stageTimeline } from '@/utils/log'
 
-const props = defineProps({ stage: { type: Object, required: true }, requestId: { type: String, required: true }, compact: Boolean, defaultExpanded: Boolean, expandFailure: Boolean, locked: Boolean, caller: {type:String,default:''} })
+const props = defineProps({ stage: { type: Object, required: true }, requestId: { type: String, required: true }, compact: Boolean, defaultExpanded: Boolean, expandFailure: Boolean, locked: Boolean, caller: {type:String,default:''}, focusedEvent: { type: Object, default: null } })
 const expanded = ref(props.defaultExpanded)
 const isHandling = computed(() => props.stage.key === 'ABIS_HANDLING')
 const span = computed(() => isHandling.value ? handlingSpan(props.stage) : props.stage)
@@ -14,6 +14,9 @@ const processing = computed(() => processingSpans(props.stage))
 const attention = computed(() => props.stage.applicable !== false && (props.stage.retryPending || ['FAILED', 'UNKNOWN'].includes(props.stage.status)))
 const statusLabel = computed(() => props.stage.applicable === false ? '不适用' : props.stage.retryPending ? '待重试' : STAGE_STATUS_LABEL[props.stage.status] || '结果未知')
 const panelId = computed(() => `events-${props.stage.instanceId}`)
+function containsEvent(stage, id) { return stage.events?.some(event => event.id === id) || stage.children?.some(child => containsEvent(child, id)) }
+watch(() => props.focusedEvent, target => { if (target && containsEvent(props.stage, target.id)) expanded.value = true }, { immediate: true })
+function focused(...events) { return !!props.focusedEvent?.id && events.some(event => event?.id === props.focusedEvent.id) }
 function eventDescription(event) {
   return /^本次动作已(?:开始|确认完成)[。.]?$/.test(event?.description || '') ? '' : event?.description
 }
@@ -36,12 +39,12 @@ function eventDescription(event) {
             <time class="event-time" :datetime="events.find(item => item.kind === 'RECEIVED')?.at" :title="formatLogTime(events.find(item => item.kind === 'RECEIVED')?.at)">{{ formatEventTime(events.find(item => item.kind === 'RECEIVED')?.at) }}</time>
             <span class="event-node" aria-hidden="true" />
             <div class="event-content"><h4>接收请求</h4>
-              <template v-for="event in events.filter(item => item.kind === 'RECEIVED')" :key="event.id">
+              <div v-for="event in events.filter(item => item.kind === 'RECEIVED')" :key="event.id" :data-event-id="event.id" :class="{ 'focused-event': focused(event) }">
                 <div class="event-heading"><el-tag size="small" :type="event.status === 'FAILED' ? 'danger' : 'success'">{{ EVENT_STATUS_LABEL[event.status] }}</el-tag></div>
                 <p class="entry-payload">用户 ID：{{ event.payload?.userId || '—' }}；接口类型：{{ event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
                 <p v-if="event.errorCode">错误码：<code>{{ event.errorCode }}</code></p><p v-if="eventDescription(event)">{{ eventDescription(event) }}</p>
                 <p v-if="event.observedAt" class="late-event">采集时间 {{ formatLogTime(event.observedAt) }}，排序与耗时仍使用事件发生时间。</p>
-              </template>
+              </div>
               <p v-if="!events.some(item => item.kind === 'RECEIVED')">暂无接收请求记录。</p>
             </div>
           </li>
@@ -49,7 +52,7 @@ function eventDescription(event) {
             <time class="event-time" :datetime="processing[0]?.start?.at" :title="formatLogTime(processing[0]?.start?.at)">{{ formatEventTime(processing[0]?.start?.at) }}</time>
             <span class="event-node" aria-hidden="true" />
             <div class="event-content"><h4>业务处理</h4>
-              <div v-for="execution in processing" :key="execution.executionId" class="processing-execution">
+              <div v-for="execution in processing" :key="execution.executionId" class="processing-execution" :data-event-id="execution.end?.id || execution.start?.id" :data-event-start-id="execution.start?.id" :class="{ 'focused-event': focused(execution.start, execution.end) }">
                 <div class="event-heading"><strong v-if="processing.length > 1">{{ execution.executionId }}</strong><el-tag size="small" :type="execution.end?.status === 'FAILED' ? 'danger' : execution.end ? 'success' : 'info'">{{ execution.end ? EVENT_STATUS_LABEL[execution.end.status] : '处理中' }}</el-tag></div>
                 <p>开始 {{ formatLogTime(execution.start?.at) }}</p><p>结束 {{ formatLogTime(execution.end?.at) }}</p>
                 <p v-if="execution.end?.errorCode || execution.start?.errorCode">错误码：<code>{{ execution.end?.errorCode || execution.start?.errorCode }}</code></p>
@@ -61,7 +64,7 @@ function eventDescription(event) {
             <time class="event-time" :datetime="events.find(item => item.kind === 'RESPONDED')?.at" :title="formatLogTime(events.find(item => item.kind === 'RESPONDED')?.at)">{{ formatEventTime(events.find(item => item.kind === 'RESPONDED')?.at) }}</time>
             <span class="event-node" aria-hidden="true" />
             <div class="event-content"><h4>发送响应</h4>
-              <div v-for="event in events.filter(item => item.kind === 'RESPONDED')" :key="event.id" class="response-event" :data-response-event="event.id">
+              <div v-for="event in events.filter(item => item.kind === 'RESPONDED')" :key="event.id" class="response-event" :data-response-event="event.id" :data-event-id="event.id" :class="{ 'focused-event': focused(event) }">
                 <div class="event-heading"><el-tag size="small" :type="event.status === 'FAILED' ? 'danger' : 'success'">{{ EVENT_STATUS_LABEL[event.status] }}</el-tag></div>
                 <p v-if="event.errorCode">错误码：<code>{{ event.errorCode }}</code></p><p v-if="eventDescription(event)">{{ eventDescription(event) }}</p>
               </div><p v-if="!events.some(item => item.kind === 'RESPONDED')">暂无发送响应记录。</p>
@@ -70,11 +73,11 @@ function eventDescription(event) {
         </ol>
       </template>
       <ol v-else-if="timeline.length" class="event-list event-timeline">
-        <li v-for="entry in timeline" :key="entry.key" class="event-entry" :class="{ 'handling-entry': entry.type === 'handling' }" :data-event-status="entry.event?.status" :data-event-kind="entry.type === 'event' ? entry.event.kind : 'ABIS_HANDLING'" :data-entry-at="entry.at || ''" :data-entry-attempt="entry.stage?.attemptId || entry.event?.attemptId">
+        <li v-for="entry in timeline" :key="entry.key" class="event-entry" :class="{ 'handling-entry': entry.type === 'handling', 'focused-event': entry.type === 'event' && focused(entry.event) }" :data-event-id="entry.event?.id" :data-event-status="entry.event?.status" :data-event-kind="entry.type === 'event' ? entry.event.kind : 'ABIS_HANDLING'" :data-entry-at="entry.at || ''" :data-entry-attempt="entry.stage?.attemptId || entry.event?.attemptId">
           <time class="event-time" :datetime="entry.at || undefined" :title="formatLogTime(entry.at)">{{ formatEventTime(entry.at) }}</time>
           <span class="event-node" :class="{ 'event-node--handling': entry.type === 'handling' }" aria-hidden="true" />
           <div class="event-content">
-            <RequestLogStage v-if="entry.type === 'handling'" :stage="entry.stage" :request-id="requestId" compact :caller="caller" />
+            <RequestLogStage v-if="entry.type === 'handling'" :stage="entry.stage" :request-id="requestId" compact :caller="caller" :focused-event="focusedEvent" />
             <template v-else>
               <div class="event-heading"><strong>{{ entry.event.action }}</strong><el-tag v-if="!['CALL_STARTED','PUBLISH_STARTED'].includes(entry.event.kind)" :type="entry.event.status === 'FAILED' ? 'danger' : entry.event.status === 'SUCCESS' ? 'success' : 'info'" size="small">{{ EVENT_STATUS_LABEL[entry.event.status] || '—' }}</el-tag><span v-if="['CALL_STARTED','PUBLISH_STARTED'].includes(entry.event.kind) && entry.event.attemptId" class="event-attempt">{{ entry.event.attemptId }}</span><span v-if="entry.event.note" class="event-note">{{ entry.event.note }}</span></div>
               <p v-if="entry.event.kind === 'RECEIVED'" class="entry-payload">用户 ID：{{ entry.event.payload?.userId || '—' }}；接口类型：{{ entry.event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
@@ -89,6 +92,7 @@ function eventDescription(event) {
 </template>
 
 <style scoped>
+.focused-event { background: #fff5dc; outline: 2px solid #e8b34d; outline-offset: 3px; border-radius: 3px; }
 .request-stage { margin-top: 0; border: 0; border-radius: 0; overflow: visible; }
 .request-stage.needs-attention { border:0; }
 .stage-toggle { display: block; width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid var(--abis-border); background: transparent; text-align: left; color: var(--el-text-color-primary); }

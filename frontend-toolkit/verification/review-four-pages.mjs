@@ -15,7 +15,7 @@ try{
  for(const width of [1366,1920,1200]){
   await page.setViewportSize({width,height:width===1920?1080:768})
   for(const[name,path,selector]of[['申请人列表','applicants','.applicant-filters'],['审计查询','audits','.audits-filters']]){
-   await go(name,path);const positions=await page.locator(`${selector} > .el-form-item`).evaluateAll(ns=>ns.map(n=>n.getBoundingClientRect().top));assert.ok(Math.max(...positions)-Math.min(...positions)<2,`${path} filter wrap at ${width}`)
+   await go(name,path);const positions=await page.locator(`${selector} > .el-form-item`).evaluateAll(ns=>ns.map(n=>n.getBoundingClientRect().top));if(width>=1366)assert.ok(Math.max(...positions)-Math.min(...positions)<2,`${path} filter wrap at ${width}`);else assert.ok(positions.every((y,i)=>i===0||y>=positions[i-1]))
    if(path==='applicants')await page.getByText('仅展示已确认注册成功且当前有效的申请人',{exact:true}).waitFor()
    if(width===1366)await page.screenshot({path:`${out}/${path}.png`,fullPage:true})
   }

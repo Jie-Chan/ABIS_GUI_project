@@ -110,7 +110,7 @@ try{
  const unsent=stage('ADAPTER_CALLING').locator(':scope > .stage-events > .event-list > [data-event-kind="ABIS_HANDLING"]')
  assert.equal(await unsent.locator(':scope > time').innerText(),'—');assert.equal(await unsent.getAttribute('data-entry-at'),'');await close()
  pass('U005 confirmed-unsent connection timeout retains failure evidence and retry budget, without inventing ABIS execution')
- await open(11);assert.equal(await drawer.getByTestId('business-summary').innerText(),'查重失败');assert.equal(all[10].currentStage,'ABIS_HANDLING');assert.equal(await state('ADAPTER_CALLING'),'成功');assert.equal(await state('ADAPTER_RESPONDED'),'成功')
+ await open(11);assert.match(await drawer.getByTestId('business-summary').innerText(),/^查重失败 · 失败响应已发布/);assert.equal(all[10].currentStage,'ABIS_HANDLING');assert.equal(await state('ADAPTER_CALLING'),'成功');assert.equal(await state('ADAPTER_RESPONDED'),'成功')
  await expand('ADAPTER_CALLING');assert.equal(await state('ABIS_HANDLING'),'失败');await expand('ABIS_HANDLING')
  assert.equal(await stage('ABIS_HANDLING').locator('[data-handling-item="responded"] .el-tag').innerText(),'成功')
  await showResponse();assert.match(await response().innerText(),/IDENTIFICATION_FAILED/);await close()

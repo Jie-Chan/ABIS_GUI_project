@@ -3,7 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node review-ui.mjs && node review-profile.mjs && node review-monitor.mjs && node review-sync.mjs && node review-log-ids.mjs && node review-applicants.mjs && node review-request-logs.mjs && node review-log-images.mjs && node review-log-layout.mjs && node review-four-pages.mjs && node review-drawer-recapture.mjs && node review-20261113.mjs && node review-applicant-thumbnails.mjs && node review-sticky-defaults.mjs && node review-fixed-query-details.mjs"
+    "test": "node review-ui.mjs && node review-profile.mjs && node review-monitor.mjs && node review-sync.mjs && node review-log-ids.mjs && node review-applicants.mjs && node review-request-logs.mjs && node review-log-images.mjs && node review-current-spec.mjs && node review-console-20261113.mjs && node review-applicant-image-labels.mjs && node review-records-footer.mjs && node review-console-20261115.mjs && node review-account-http.mjs",
+    "test:layout": "node review-console-20261113.mjs && node review-records-footer.mjs",
+    "test:workflows": "node review-current-spec.mjs",
+    "test:images": "node review-applicant-image-labels.mjs",
+    "test:footer": "node review-records-footer.mjs",
+    "test:current": "node review-console-20261115.mjs",
+    "test:account-http": "node review-account-http.mjs"
   },
   "devDependencies": {
     "playwright": "1.64.1"

@@ -7,6 +7,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { NAV_ITEMS } from '@/constants/nav'
 import { useAuthStore } from '@/stores/auth'
+import { PERMISSION } from '@/constants/roles'
 
 const routes = [
   {
@@ -19,12 +20,16 @@ const routes = [
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/monitor',
-    children: NAV_ITEMS.map(({ name, label, permission, component }) => ({
+    children: [...NAV_ITEMS.map(({ name, label, permission, component }) => ({
       path: name,
       name,
       component,
       meta: { title: label, permission },
-    })),
+    })), ...(import.meta.env.VITE_USE_MOCK !== 'false' ? [{
+      path: 'acceptance/recapture', name: 'recapture-acceptance',
+      component: () => import('@/views/RecaptureAcceptanceView.vue'),
+      meta: { title: '重采验收', permission: PERMISSION.APPLICANT_VIEW },
+    }] : [])],
   },
   { path: '/:pathMatch(.*)*', redirect: '/monitor' },
 ]

@@ -37,7 +37,7 @@ function buildRequest(sample, index, base) {
   if (api === 'identification') responseBody.candidates = sample.candidates ? sample.candidates.map(item => ({ ...item })) : userId === 'U002' ? [{ userId: 'U001', rank: 1, score: 96 }] : []
   if (api === 'delete') responseBody.deletedUserId = userId
   if (userId === 'U002' && api === 'delete') responseBody.message = '已删除本次新注册的 U002，已有用户 U001 未被删除'
-  const requestBody = { userId, feature, api, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}), ...(api === 'enrollment' ? { images: [{ imageId: `MOCK-${requestId}`, format: 'mock-reference' }] } : {}) }
+  const requestBody = { userId, feature, api, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}), ...(api === 'enrollment' ? { images: [{ imageId: `IMAGE-${requestId}`, format: 'image/jpeg' }] } : {}) }
   const executionId = 'execution-attempt-1', attemptId = 'attempt-1'
   const handling = { ...stage('ABIS_HANDLING', mode === 'sync' ? 0 : 70, 250, [
     event('RECEIVED', '接收请求', mode === 'sync' ? 0 : 70, 'SUCCESS', { attemptId, requestBody: mode === 'sync' ? requestBody : undefined, payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) }, description: 'ABIS 入口记录本次业务对象和接口类型。' }),
@@ -119,4 +119,32 @@ function buildRequest(sample, index, base) {
 export function buildLogRecords() {
   const base = Date.now() - 600000
   return REQUESTS.map((sample, index) => buildRequest(sample, index, base))
+}
+
+/** 只通过完整 ID 查询的补充验收记录，不改变默认 15 条及入库数据。 */
+export function buildSupplementalLogRecords() {
+  const base = Date.now() - 600000
+  const missingUser = buildRequest({ userId: null, feature: 'face', api: 'identification', scenario: '缺少用户 ID 的请求' }, 15, base)
+  const retried = buildRequest({ userId: 'U017', feature: 'face', api: 'identification', scenario: '首次连接超时未发送，第二次调用成功' }, 16, base)
+  const calling = retried.stages.find(stage => stage.key === 'ADAPTER_CALLING')
+  const handling = calling.children[0]
+  const started = calling.events.find(event => event.kind === 'CALL_STARTED')
+  const offsetAt = offset => new Date(Date.parse(started.at) + offset).toISOString()
+  const firstStarted = { ...started, requestBody: undefined }
+  const secondStarted = { ...started, id: `${retried.requestId}-retry-start`, action: '发起第 2 次 ABIS 调用', at: offsetAt(1000), attemptId: 'attempt-2' }
+  const failure = { id: `${retried.requestId}-connect-timeout`, requestId: retried.requestId, kind: 'CALL_FAILED', action: '获取 HTTP 连接超时', at: offsetAt(40), attemptId: 'attempt-1', status: 'FAILED', errorCode: 'CONNECT_TIMEOUT', requestSent: false, description: '首次获取连接超时，确认 HTTP 请求尚未发送，无请求或响应正文。' }
+  const retry = { id: `${retried.requestId}-retry-scheduled`, requestId: retried.requestId, kind: 'RETRY_SCHEDULED', action: '重新排队等待调用', at: offsetAt(50), status: 'SUCCESS', attemptId: 'attempt-1', description: '确认未发送，按重试策略发起第二次调用。' }
+  calling.events = [calling.events[0], firstStarted, failure, retry, secondStarted, { ...calling.events.at(-1), at: offsetAt(1210), attemptId: 'attempt-2' }]
+  const unobserved = { key: 'ABIS_HANDLING', instanceId: `${retried.requestId}-handling-attempt-1`, attemptId: 'attempt-1', applicable: false, status: 'WAITING', startedAt: null, endedAt: null, events: [] }
+  handling.attemptId = 'attempt-2'
+  handling.instanceId = `${retried.requestId}-handling-attempt-2`
+  handling.events = handling.events.map(event => ({ ...event, attemptId: 'attempt-2', at: new Date(Date.parse(event.at) + 1000).toISOString() }))
+  Object.assign(handling, handlingSpan(handling))
+  calling.children = [unobserved, handling]
+  calling.endedAt = offsetAt(1210)
+  const published = retried.stages.find(stage => stage.key === 'ADAPTER_RESPONDED')
+  for (const field of ['startedAt', 'endedAt']) published[field] = new Date(Date.parse(published[field]) + 1000).toISOString()
+  published.events = published.events.map(event => ({ ...event, at: new Date(Date.parse(event.at) + 1000).toISOString() }))
+  retried.publishedAt = published.endedAt
+  return [missingUser, projectRequest(retried)].map((record, index) => ({ ...record, id: 2001 + index, historical: true }))
 }

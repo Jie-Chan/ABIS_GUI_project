@@ -13,11 +13,13 @@ import { buildEnrollmentSubjects } from '@/mock/applicants'
 import { buildBusinessSnapshot } from '@/mock/business'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
-import { requestDuration, projectRequest } from '@/utils/log'
+import { requestDuration, projectRequest, formatLogTime } from '@/utils/log'
 import { PUBLICATION_LABEL, STAGE_LABEL } from '@/constants/log'
-import { THRESHOLD_KEYS } from '@/constants/threshold'
+import { normalizeAuditAction } from '@/constants/audit'
+import { THRESHOLD_KEYS, THRESHOLD_MAX } from '@/constants/threshold'
 import { LOG_FEATURE_LABEL, LOG_RESULT_LABEL } from '@/constants/log'
 import { optionalAccountFields } from '@/utils/account'
+import { latestEnrollmentRecord } from '@/utils/applicant'
 import { ROLE, PERMISSION, hasPermission, canResetAccountPassword, canDeleteAccount, canChangeAccountRole, canToggleAccountEnabled } from '@/constants/roles'
 
 // —— 可变状态：模块加载时克隆一份，使增删改在会话内可见 ——
@@ -51,7 +53,10 @@ function managedAccount(id) {
 
 // 演示密码仅保留在模块内存，刷新后恢复种子数据。
 function setTemporaryPassword(account) {
-  const password = `Demo-${account.id}-${crypto.randomUUID().slice(0, 8)}`
+  // getRandomValues 兼容通过普通 HTTP 服务器地址访问的浏览器。
+  const random = globalThis.crypto.getRandomValues(new Uint8Array(4))
+  const suffix = Array.from(random, byte => byte.toString(16).padStart(2, '0')).join('')
+  const password = `Demo-${account.id}-${suffix}`
   const credential = credentials.find(item => item.accountId === account.id)
   if (credential) credential.password = password
   else credentials.push({ accountId: account.id, username: account.username, password })
@@ -129,7 +134,7 @@ export default {
     if (!payload.username?.trim() || !payload.displayName?.trim() || ![ROLE.ADMIN, ROLE.OPERATOR].includes(payload.role)) throw new Error('请填写用户名、姓名并选择角色')
     if (accounts.some(item => item.username === payload.username)) throw new Error('用户名已存在')
     const account = {
-      id: nextAccountId++,
+      id: nextAccountId,
       username: payload.username,
       displayName: payload.displayName,
       role: payload.role,
@@ -138,8 +143,10 @@ export default {
       createdAt: formatDateTime(new Date()),
       lastLoginAt: '—',
     }
+    const initialPassword = setTemporaryPassword(account)
     accounts = [...accounts, account]
-    return { ...account, initialPassword: setTemporaryPassword(account) }
+    nextAccountId += 1
+    return { ...account, initialPassword }
   },
 
   async updateAccount(id, payload) {
@@ -190,6 +197,10 @@ export default {
     if (unknown.length) {
       throw new Error(`阈值键不合法：${unknown.join('、')}（合法键：${allowed.join('、')}）`)
     }
+    for (const { key, protocolLowerBound } of THRESHOLD_KEYS) {
+      const value = payload[key]
+      if (!Number.isInteger(value) || value < protocolLowerBound || value > THRESHOLD_MAX) throw new Error(`${key} 阈值须为 ${protocolLowerBound}–${THRESHOLD_MAX} 的整数`)
+    }
     thresholds = { ...thresholds, ...payload }
     return { ...thresholds }
   },
@@ -216,7 +227,7 @@ export default {
       const documentScenario = scenario.startsWith('document-')
       const extra = documentScenario ? buildDocumentRecaptureLogs(scenario.slice(9)) : buildRecaptureLogs({ fingerFailure: scenario === 'failed' }).slice(0, ({original:3,deleted:5,face:6,complete:9,failed:9})[scenario])
       const sampleIds = documentScenario ? ['U301', 'U302', 'U303'] : ['U900']
-      logs = [...defaultBusiness.logs.filter(log => !sampleIds.includes(log.userId)), ...extra]
+      logs = [...defaultBusiness.logs.filter(log => !sampleIds.includes(log.userId)), ...extra.map(log => ({ ...log, historical: true }))]
       subjects = [...defaultBusiness.subjects.filter(person => !sampleIds.includes(person.userId)), ...buildEnrollmentSubjects(extra).filter(person => sampleIds.includes(person.userId))]
       applicants = subjects.filter(person => person.faceCount > 0)
     }
@@ -254,9 +265,8 @@ export default {
     await delay()
     if (!hasPermission(currentAccount().role, PERMISSION.APPLICANT_VIEW)) throw new Error('没有图像查看权限')
     const person = subjects.find(item => item.userId === userId)
-    const record = person?.records.filter(item => item.feature === feature
-      && (feature !== 'finger' || !fingerPosition || item.fingerPosition === fingerPosition))
-      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+    const record = latestEnrollmentRecord(person?.records.filter(item => item.feature === feature
+      && (feature !== 'finger' || !fingerPosition || item.fingerPosition === fingerPosition)))
     const deleted = !record && (person?.changes.some(change => change.operation === '删除' && change.feature === feature)
       || (!person && logs.some(log => log.userId === userId && log.feature === feature && log.api === 'delete' && log.result === 'success')))
     return {
@@ -273,7 +283,8 @@ export default {
 
   async listAudits(params = {}) {
     await delay()
-    return paginate(filterAudits(audits, params), params)
+    const dates = audits.map(row => row.operatedAt.slice(0, 10)).sort()
+    return { ...paginate(filterAudits(audits, params), params), demoDateRange: { start: dates[0], end: dates.at(-1) } }
   },
 
   // ——— 导出（需求 1.4）———
@@ -283,7 +294,7 @@ export default {
     const now = Date.now()
     const rows = filterLogs(logs, params).map(row => {
       const duration = requestDuration(row, now)
-      return { ...row, sourceIp: row.sourceIp || '—', durationLabel: duration.label, durationText: duration.text }
+      return { ...row, calledAt: formatLogTime(row.receivedAt), userId: row.userId || '—', sourceIp: row.sourceIp || '—', durationLabel: duration.label, durationText: duration.text }
     })
     return toCsvBlob(rows, [
       ['calledAt', '接收时间'], ['sourceIp', '请求来源 IP'], ['requestId', '请求 ID'], ['userId', '用户 ID'],
@@ -318,7 +329,7 @@ export default {
  *   'YYYY-MM-DD HH:mm:ss' 才成立。传 Date 对象或 'YYYY-MM-DD' 不报错，
  *   只会静默过滤掉全部记录 —— 调用方须先用 formatDateTime 归一化。
  */
-function filterLogs(list, { startTime, endTime, userId = '', requestId = '', requestIds = [], api, feature, result, minCost, maxCost } = {}) {
+function filterLogs(list, { startTime, endTime, userId = '', requestId = '', requestIds = [], api, feature, result, publication, minCost, maxCost } = {}) {
   const applicant = userId.trim()
   const request = requestId.trim()
   return list.map(projectRequest).filter((r) => {
@@ -331,6 +342,7 @@ function filterLogs(list, { startTime, endTime, userId = '', requestId = '', req
     if (api && r.api !== api) return false
     if (feature && r.feature !== feature) return false
     if (result && r.result !== result) return false
+    if (publication && (r.mode === 'sync' || r.publication !== publication)) return false
     if (minCost != null && (r.costMs == null || r.costMs < minCost)) return false
     if (maxCost != null && (r.costMs == null || r.costMs > maxCost)) return false
     return true
@@ -346,11 +358,11 @@ function filterAudits(list, { startTime, endTime, operator, action, result } = {
   return list.filter((r) => {
     if (startTime && r.operatedAt < startTime) return false
     if (endTime && r.operatedAt > endTime) return false
-    if (operator && r.operator !== operator) return false
-    if (action && r.action !== action) return false
+    if (operator?.trim() && r.operator !== operator.trim()) return false
+    if (action && normalizeAuditAction(r.action) !== normalizeAuditAction(action)) return false
     if (result && r.result !== result) return false
     return true
-  })
+  }).map(row => ({ ...row, action: normalizeAuditAction(row.action) }))
 }
 
 /**

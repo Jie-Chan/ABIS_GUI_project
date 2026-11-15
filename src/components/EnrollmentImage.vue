@@ -5,12 +5,13 @@ const props = defineProps({ record: { type: Object, required: true }, large: Boo
 defineEmits(['open', 'unavailable'])
 const failed = ref(false)
 const quality = computed(() => Number.isFinite(props.record.qualityScore) ? props.record.qualityScore : '—')
+const imageDescription = computed(() => `申请人 ${props.record.userId || '—'} · ${props.record.feature === 'face' ? '人脸' : `指纹 · ${fingerLabel(props.record.fingerPosition)}`}`)
 watch(() => props.record.imageUrl, () => { failed.value = false })
 </script>
 <template>
-  <component :is="large || !interactive ? 'div' : 'button'" :type="large || !interactive ? undefined : 'button'" class="enrollment-image" :class="{ large, interactive }" :aria-label="large || !interactive ? undefined : `查看入库图像 ${record.recordId}`" @click="!large && interactive && $emit('open', record)">
+  <component :is="large || !interactive ? 'div' : 'button'" :type="large || !interactive ? undefined : 'button'" class="enrollment-image" :class="{ large, interactive }" :aria-label="large || !interactive ? undefined : `查看入库图像 ${imageDescription}`" @click="!large && interactive && $emit('open', record)">
     <span class="image-frame">
-      <img v-if="record.imageUrl && !failed" :src="record.imageUrl" :alt="`${record.recordId} ${record.feature === 'face' ? '人脸' : fingerLabel(record.fingerPosition)} Mock 样例`" @error="failed = true; $emit('unavailable', record.recordId)" />
+      <img v-if="record.imageUrl && !failed" :src="record.imageUrl" :alt="imageDescription" @error="failed = true; $emit('unavailable', record.imageUrl)" />
       <span v-else class="image-unavailable">图像不可用</span>
     </span>
     <span v-if="showQuality" class="quality-score" :class="{ 'quality-score--missing': quality === '—' }" :aria-label="`质量分：${quality}`">{{ quality }}</span>
