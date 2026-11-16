@@ -136,6 +136,7 @@ onMounted(load)
         <el-descriptions-item v-if="detailShowsChanges" label="变更前值">{{ detailValue(detail.beforeValue) }}</el-descriptions-item>
         <el-descriptions-item v-if="detailShowsChanges" label="变更后值">{{ detailValue(detail.afterValue) }}</el-descriptions-item>
         <el-descriptions-item label="结果" :span="2">{{ detailValue(detail.result) }}</el-descriptions-item>
+        <el-descriptions-item v-if="detail.action === AUDIT_ACTION.LOGIN && detail.result === '失败'" label="失败类别" :span="2">{{ detail.failureCategory || '未记录' }}</el-descriptions-item>
         <el-descriptions-item label="来源 IP" :span="2">{{ detailValue(detail.sourceIp) }}</el-descriptions-item>
         <el-descriptions-item label="会话 ID" :span="2">{{ detailValue(detail.sessionId) }}</el-descriptions-item>
       </el-descriptions>

@@ -28,13 +28,14 @@ try{
  await page.goto(`${base}/login`);await page.locator('.login-content input').nth(0).fill('admin');await page.locator('.login-content input').nth(1).fill('admin123')
  await button('登录').click();await page.waitForURL('**/monitor');await loaded()
  await page.getByRole('menuitem',{name:'日志查询',exact:true}).click();await page.waitForURL('**/logs');await loaded()
- const all=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.originalRequestLogs=api.listLogs;return(await api.listLogs({pageSize:100})).items})
- assert.deepEqual(await page.locator('.request-table th').allTextContents(),['请求 ID','用户 ID','接口类型','接收时间','请求来源 IP','处理环节','执行状态','响应发布状态','请求耗时','操作'])
+ const all=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.originalRequestLogs=api.listLogs;return(await api.listLogs({pageSize:100,sortOrder:'ascending'})).items})
+ assert.deepEqual((await page.locator('.request-table th').allTextContents()).map(t=>t.replace(/正序|倒序/g,'').trim()),['请求 ID','申请人 ID','接口类型','接收时间','请求来源 IP','处理环节','执行状态','响应发布状态','请求耗时','操作'])
  assert.equal(all.length,15);assert.equal(new Set(all.map(r=>r.requestId)).size,15)
  assert.deepEqual(all.map(r=>[r.userId,r.api]),[['U001','enrollment'],['U001','enrollment'],['U001','identification'],['U001','identification'],['U002','enrollment'],['U002','identification'],['U002','delete'],['U003','enrollment'],['U004','identification'],['U005','identification'],['U006','identification'],['U007','identification'],['U008','delete'],['U009','identification'],['U010','identification']])
  assert.ok(all.slice(0,12).every(r=>r.mode==='async'));assert.equal(all[12].mode,'sync')
  assert.equal(await page.locator('.request-table .el-table__row').count(),15)
- pass('default is exactly 15 independently identified requests in the documented U001–U008 business order')
+ assert.deepEqual(await page.locator('.request-table .el-table__row td:nth-child(1) .cell').allTextContents(), Array.from({length:15},(_,i)=>`REQ-${String(15-i).padStart(8,'0')}`))
+ pass('default shows exactly 15 requests newest first; explicit ascending order preserves the documented U001–U008 business sequence')
  for(let i=1;i<all.length;i++)assert.ok(Date.parse(all[i].receivedAt)>Date.parse(all[i-1].receivedAt))
  for(const [first,next] of [[0,1],[1,2],[2,3],[4,5],[5,6]])assert.ok(Date.parse(all[first].publishedAt)<Date.parse(all[next].receivedAt))
  const counts=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;return Promise.all(['U001','U002','U003'].map(async userId=>(await api.listLogs({userId})).total))})
@@ -91,9 +92,9 @@ try{
  assert.equal(deletion.deletedUserId,'U002');assert.equal(deletion.userId,'U002');assert.match(deletion.message,/U001 未被删除/)
  await close()
  pass('U002 registers then identifies candidate U001 and deletes only U002; candidate IDs remain solely in the response')
- await open(8);assert.match(await drawer.getByTestId('business-summary').innerText(),/待人工核查/);assert.equal(all[7].api,'enrollment');assert.equal(all[7].userId,'U003');assert.equal(all[7].currentStage,'ADAPTER_CALLING')
+ await open(8);assert.match(await drawer.getByTestId('business-summary').innerText(),/等待 ABIS 响应超时，执行结果未确认。/);assert.equal(all[7].api,'enrollment');assert.equal(all[7].userId,'U003');assert.equal(all[7].currentStage,'ADAPTER_CALLING')
  assert.equal(await state('ADAPTER_CALLING'),'结果未知');await expand('ADAPTER_CALLING');assert.equal(await state('ABIS_HANDLING'),'结果未知')
- await stage('ADAPTER_CALLING').getByText('ABIS_TIMEOUT',{exact:true}).waitFor();await drawer.getByText('业务结果未确认，请人工核查。',{exact:true}).waitFor();await drawer.getByText('暂无最终响应',{exact:true}).waitFor()
+ await stage('ADAPTER_CALLING').getByText('ABIS_TIMEOUT',{exact:true}).waitFor();await drawer.getByText('请结合请求 ID、申请人 ID 和接收时间核对 ABIS 侧处理记录。',{exact:true}).waitFor();await drawer.getByText('暂无最终响应',{exact:true}).waitFor()
  assert.equal(await drawer.getByRole('button',{name:'查看响应',exact:true}).count(),0);await showResponse();await drawer.getByText('暂无响应正文记录',{exact:true}).waitFor();assert.match(await duration(),/^请求已用时/)
  const elapsed=await drawer.locator('[data-testid="request-duration"]').textContent();await page.waitForFunction(p=>document.querySelector('[data-testid="request-duration"]').textContent!==p,elapsed)
  assert.deepEqual(all.filter(r=>r.userId==='U003').map(r=>r.api),['enrollment'])
@@ -126,7 +127,7 @@ try{
  pass('U008 sync deletion uses one handling stage, three events, no publication status and successful U008 response')
  const utility=await page.evaluate(async()=>{
   const {projectRequest,responseForEvent,durationMs,stageTimeline}=await import('/src/utils/log.js')
-  const all=(await window.originalRequestLogs({pageSize:100})).items
+  const all=(await window.originalRequestLogs({pageSize:100,sortOrder:'ascending'})).items
   const r=structuredClone(all[5]);r.userId='WRONG';r.api='delete';r.receivedAt='bad'
   const inner=r.stages[1].children[0];inner.events[0].payload={userId:'LATE-USER',api:'delete'};inner.events[0].observedAt=new Date().toISOString()
   r.stages[1].events.reverse();inner.events.reverse()
@@ -197,7 +198,7 @@ try{
  assert.match(csv.find(l=>l.includes('"REQ-00000011"')),/ABIS 处理.*失败.*已发布/)
  assert.match(csv.find(l=>l.includes('"REQ-00000012"')),/成功.*待发布.*已用时/)
  const filters=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;return {done:(await api.listLogs({minCost:0,pageSize:100})).items,exact:(await api.listLogs({minCost:320,maxCost:320,pageSize:100})).items,deletes:(await api.listLogs({api:'delete',pageSize:100})).items}})
- assert.ok(filters.done.every(r=>r.costMs!=null));assert.ok(filters.exact.length>0);assert.ok(filters.exact.every(r=>r.costMs===320));assert.deepEqual(filters.deletes.map(r=>r.userId),['U002','U008'])
+ assert.ok(filters.done.every(r=>r.costMs!=null));assert.ok(filters.exact.length>0);assert.ok(filters.exact.every(r=>r.costMs===320));assert.deepEqual(filters.deletes.map(r=>r.userId),['U008','U002'])
  pass('CSV contains exactly the 15 requests with correct statuses/durations; duration filters exclude unfinished requests and delete filters cover both modes')
  await page.waitForFunction(()=>!document.querySelector('.el-message'))
  for(const width of [1920,1366,1024,768,390,320]){

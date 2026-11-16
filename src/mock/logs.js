@@ -124,7 +124,7 @@ export function buildLogRecords() {
 /** 只通过完整 ID 查询的补充验收记录，不改变默认 15 条及入库数据。 */
 export function buildSupplementalLogRecords() {
   const base = Date.now() - 600000
-  const missingUser = buildRequest({ userId: null, feature: 'face', api: 'identification', scenario: '缺少用户 ID 的请求' }, 15, base)
+  const missingUser = buildRequest({ userId: null, feature: 'face', api: 'identification', scenario: '缺少申请人 ID 的请求' }, 15, base)
   // 复用此历史样例验收调用方式未记录，仍可按请求 ID 查询并查看详情。
   delete missingUser.mode
   const retried = buildRequest({ userId: 'U017', feature: 'face', api: 'identification', scenario: '首次连接超时未发送，第二次调用成功' }, 16, base)
@@ -148,5 +148,11 @@ export function buildSupplementalLogRecords() {
   for (const field of ['startedAt', 'endedAt']) published[field] = new Date(Date.parse(published[field]) + 1000).toISOString()
   published.events = published.events.map(event => ({ ...event, at: new Date(Date.parse(event.at) + 1000).toISOString() }))
   retried.publishedAt = published.endedAt
-  return [missingUser, projectRequest(retried)].map((record, index) => ({ ...record, id: 2001 + index, historical: true }))
+  const unconfirmed = buildRequest({ userId: 'U018', feature: 'face', api: 'enrollment', scenario: '执行结果未确认，原因未记录' }, 17, base)
+  Object.assign(unconfirmed, { result: 'unknown', publication: 'none', publishedAt: null })
+  const unconfirmedCall = unconfirmed.stages.find(stage => stage.key === 'ADAPTER_CALLING')
+  Object.assign(unconfirmedCall, { status: 'UNKNOWN', endedAt: null, events: unconfirmedCall.events.slice(0, 2) })
+  Object.assign(unconfirmedCall.children[0], { status: 'UNKNOWN', startedAt: null, endedAt: null, events: [] })
+  Object.assign(unconfirmed.stages.find(stage => stage.key === 'ADAPTER_RESPONDED'), { status: 'WAITING', startedAt: null, endedAt: null, events: [] })
+  return [missingUser, projectRequest(retried), projectRequest(unconfirmed)].map((record, index) => ({ ...record, id: 2001 + index, historical: true }))
 }

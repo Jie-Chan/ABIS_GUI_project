@@ -53,7 +53,7 @@ try {
         const data = await firstRow.innerText(); assert.match(data,/REQ-00000001/); assert.equal(await page.locator('.request-table .el-scrollbar__wrap').evaluate(n=>n.scrollWidth-n.clientWidth),0)
         await page.screenshot({path:`${out}/logs-sticky-${width}.png`}); await page.evaluate(()=>scrollTo(0,0)); await paint()
         const labels = await page.locator('.logs-filters .el-form-item__label').evaluateAll(nodes=>nodes.map(n=>({name:n.textContent,x:n.getBoundingClientRect().x})))
-        for(const [a,b] of [['请求 ID','接口类型'],['用户 ID','生物模态'],['时间范围','执行状态']]) assert.ok(Math.abs(labels.find(l=>l.name===a).x-labels.find(l=>l.name===b).x)<1)
+        for(const [a,b] of [['请求 ID','接口类型'],['申请人 ID','生物模态'],['时间范围','执行状态']]) assert.ok(Math.abs(labels.find(l=>l.name===a).x-labels.find(l=>l.name===b).x)<1)
       }
       if(width===624) {
         const total = await page.locator('.record-count').innerText()

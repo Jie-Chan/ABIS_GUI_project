@@ -55,6 +55,7 @@ export function buildAuditRecords(total = 64) {
       beforeValue: spec.hasChange ? String(spec.from) : '',
       afterValue: spec.hasChange ? String(spec.to) : '',
       result: spec.failed ? '失败' : '成功',
+      ...(spec.failed && i % 16 === 1 ? { failureCategory: '凭据校验失败' } : {}),
       sourceIp: operator.ip,
       sessionId: `sess-${String(1000 + Math.floor(i / 4))}`,
     })

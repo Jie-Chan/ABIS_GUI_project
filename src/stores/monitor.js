@@ -36,8 +36,9 @@ export const useMonitorStore = defineStore('monitor', () => {
   /** 启动轮询（1 分钟）。组件卸载时务必调用 stop() */
   function start() {
     stop()
-    refresh()
+    const refreshed = refresh()
     timer = setInterval(refresh, MONITOR_REFRESH_INTERVAL_MS)
+    return refreshed
   }
 
   function stop() {

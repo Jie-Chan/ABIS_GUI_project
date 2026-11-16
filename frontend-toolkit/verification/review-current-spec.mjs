@@ -121,7 +121,7 @@ try {
     for (const title of ['待查图像','候选图像']) {
       await log.getByRole('button', { name: `放大${title}`, exact: true }).click()
       const preview = page.locator('.comparison-preview').filter({ visible: true })
-      assert.match(await preview.locator('.preview-user').innerText(), /用户 ID：U/)
+      assert.match(await preview.locator('.preview-user').innerText(), /申请人 ID：U/)
       if (id.endsWith('14')) assert.match(await preview.locator('.preview-user').innerText(), /左手食指/)
       assert.equal(await preview.locator('.preview-image').evaluate(el => getComputedStyle(el).objectFit), 'contain')
       await preview.getByRole('button', { name: '关闭预览', exact: true }).click(); await preview.waitFor({ state: 'hidden' })
@@ -132,7 +132,7 @@ try {
   }
   pass('face/finger zoom preserves identity/position and candidate; tab changes retain selection and reopening resets to candidate one')
 
-  await queryId('REQ-00000016'); assert.equal(await page.locator('.request-table .el-table__row td').nth(1).innerText(), '—'); await openLog('REQ-00000016'); assert.match(await log.locator('.request-summary').innerText(), /用户 ID\s+—/); await closeLog()
+  await queryId('REQ-00000016'); assert.equal(await page.locator('.request-table .el-table__row td').nth(1).innerText(), '—'); await openLog('REQ-00000016'); assert.match(await log.locator('.request-summary').innerText(), /申请人 ID\s+—/); await closeLog()
   await queryId('REQ-00000017'); await openLog('REQ-00000017'); await log.getByRole('button', { name: '历史异常', exact: true }).click(); assert.match(await log.locator('.focused-event').innerText(), /CONNECT_TIMEOUT/); assert.equal(await log.locator('[data-stage="ABIS_HANDLING"]').count(), 2)
   await log.getByRole('tab', { name: '接口报文', exact: true }).click(); assert.match(await log.locator('.response-selector').innerText(), /attempt-1/)
   assert.equal(await log.getByLabel('ABIS 请求 JSON').count(), 0); assert.equal(await log.getByLabel('ABIS 响应 JSON').count(), 0); assert.match(await log.locator('.request-tabs').innerText(), /正文|参数|响应/)

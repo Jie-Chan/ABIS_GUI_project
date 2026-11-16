@@ -1,22 +1,26 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { fingerLabel } from '@/constants/applicant'
-const props = defineProps({ record: { type: Object, required: true }, large: Boolean, interactive: { type: Boolean, default: true }, showQuality: { type: Boolean, default: true } })
+const props = defineProps({ record: { type: Object, required: true }, large: Boolean, interactive: { type: Boolean, default: true }, showQuality: { type: Boolean, default: true }, qualityLabel: Boolean })
 defineEmits(['open', 'unavailable'])
 const failed = ref(false)
 const canOpen = computed(() => !props.large && props.interactive && !!props.record.imageUrl && !failed.value)
 const quality = computed(() => Number.isFinite(props.record.qualityScore) ? props.record.qualityScore : '—')
 const imageDescription = computed(() => `申请人 ${props.record.userId || '—'} · ${props.record.feature === 'face' ? '人脸' : `指纹 · ${fingerLabel(props.record.fingerPosition)}`}`)
+const missingQuality = computed(() => props.showQuality && quality.value === '—')
+const accessibleLabel = computed(() => `${canOpen.value ? '查看入库图像 ' : ''}${imageDescription.value}${!props.record.imageUrl || failed.value ? ' · 图像不可用' : ''}${missingQuality.value ? ' · 质量分未提供' : ''}`)
 watch(() => props.record.imageUrl, () => { failed.value = false })
 </script>
 <template>
-  <component :is="canOpen ? 'button' : 'div'" :type="canOpen ? 'button' : undefined" class="enrollment-image" :class="{ large, interactive: canOpen }" :role="!canOpen && (!record.imageUrl || failed) ? 'img' : undefined" :aria-label="canOpen ? `查看入库图像 ${imageDescription}` : !record.imageUrl || failed ? `${imageDescription} · 图像不可用` : undefined" @click="canOpen && $emit('open', record)">
+  <el-tooltip content="质量分未提供" :disabled="!missingQuality" :trigger="['hover', 'focus']" placement="top">
+  <component :is="canOpen ? 'button' : 'div'" :type="canOpen ? 'button' : undefined" class="enrollment-image" :class="{ large, interactive: canOpen }" :role="!canOpen ? 'img' : undefined" :tabindex="!canOpen && missingQuality ? 0 : undefined" :aria-label="accessibleLabel" @click="canOpen && $emit('open', record)">
     <span class="image-frame">
       <img v-if="record.imageUrl && !failed" :src="record.imageUrl" :alt="imageDescription" @error="failed = true; $emit('unavailable', record.imageUrl)" />
       <span v-else class="image-unavailable">图像不可用</span>
     </span>
-    <span v-if="showQuality" class="quality-score" :class="{ 'quality-score--missing': quality === '—' }" :aria-label="`质量分：${quality}`">{{ quality }}</span>
+    <span v-if="showQuality" class="quality-score" :class="{ 'quality-score--missing': quality === '—' }" :aria-label="missingQuality ? '质量分未提供' : `质量分：${quality}`"><span v-if="qualityLabel" class="quality-caption">质量分 </span><span class="quality-value">{{ quality }}</span></span>
   </component>
+  </el-tooltip>
 </template>
 <style scoped>
 .enrollment-image { box-sizing: border-box; display: flex; flex-direction: column; width: 100%; height: 155px; padding: 0; background: #f4f7fb; border: 1px solid var(--abis-border); border-radius: 7px; overflow: hidden; color: var(--abis-muted); }

@@ -50,7 +50,7 @@ async function visibleBox(locator, top = 0, bottom = page.viewportSize().height)
 }
 async function previewMetadata(name) { return preview.locator('.el-descriptions__label').filter({ hasText: new RegExp(`^${name}$`) }).locator('xpath=following-sibling::*[contains(@class,"el-descriptions__content")][1]').innerText() }
 async function checkPreview(image, label) {
-  const source = await image.locator('img').getAttribute('src'), quality = (await image.locator('.quality-score').innerText()).trim()
+  const source = await image.locator('img').getAttribute('src'), quality = (await image.locator('.quality-value').innerText()).trim()
   await image.scrollIntoViewIfNeeded(); await image.click(); await preview.waitFor()
   await page.waitForFunction(() => ![...document.querySelectorAll('.el-overlay')].some(node => /enter-active/.test(node.className))); await paint()
   assert.equal(await preview.locator('img').getAttribute('src'), source)
@@ -140,7 +140,7 @@ try {
     measurements.push({ kind: 'full-height fixed ten slots', userId: id, drawer: drawerBox, heights, previewHeights: frames, bottomPadding: white.y + white.height - last.y - last.height, colors })
     if (id === 'U301') {
       const index = person.locator('[data-finger="left_index"] .enrollment-image')
-      assert.equal((await index.locator('.quality-score').innerText()).trim(), '97')
+      assert.equal((await index.locator('.quality-value').innerText()).trim(), '97')
       await checkPreview(index, 'U301-latest-index-preview')
     }
     await shot(`applicant-${id}-1440`); await close(person)
@@ -206,13 +206,13 @@ try {
       const slot = person.locator(`[data-finger="${key}"]`)
       await slot.getByText('图像不可用', { exact: true }).waitFor(); assert.equal(await slot.getByRole('button').count(), 0)
       assert.match(await slot.getByRole('img').getAttribute('aria-label'), /左手.*图像不可用/)
-      assert.equal((await slot.locator('.quality-score').innerText()).trim(), quality)
+      assert.equal((await slot.locator('.quality-value').innerText()).trim(), quality)
     }
     for (const [key, width, height, quality] of [['left_thumb', 300, 400, '0'], ['left_index', 320, 300, '—']]) {
       const image = person.locator(`[data-finger="${key}"] .enrollment-image`)
       await image.locator('img').evaluate(node => node.decode())
       assert.deepEqual(await image.locator('img').evaluate(node => ({ width: node.naturalWidth, height: node.naturalHeight, fit: getComputedStyle(node).objectFit })), { width, height, fit: 'contain' })
-      assert.equal((await image.locator('.quality-score').innerText()).trim(), quality)
+      assert.equal((await image.locator('.quality-value').innerText()).trim(), quality)
       await checkPreview(image, `aspect-${width}-${height}-preview`)
       measurements.push({ kind: 'aspect-ratio sample', finger: key, naturalWidth: width, naturalHeight: height, quality })
     }

@@ -179,7 +179,7 @@ try {
     await openLog(id); await images(); await log.getByText(text, { exact: true }).waitFor(); await closeDrawer(log)
   }
   await queryLog('REQ-00000016'); await openLog('REQ-00000016')
-  assert.match(await log.locator('.request-summary').innerText(), /用户 ID[\s\S]*—/); await closeDrawer(log)
+  assert.match(await log.locator('.request-summary').innerText(), /申请人 ID[\s\S]*—/); await closeDrawer(log)
   pass('no-candidate, processing and failed comparisons remain distinct, and a request lacking user ID is queryable by Enter')
 
   await go('/applicants'); await page.getByPlaceholder('输入完整申请人 ID').fill('U301'); await page.getByPlaceholder('输入完整申请人 ID').press('Enter'); await loaded(); assert.equal(await total(), 1)
@@ -190,7 +190,7 @@ try {
   assert.equal(await leftHand.getByRole('heading', { name: '左手食指', exact: true }).count(), 0)
   const fingerButton = finger.getByRole('button', { name: /左手食指/ })
   assert.equal(await fingerButton.count(), 1); assert.match(await finger.locator('img').getAttribute('alt'), /U301.*左手食指/)
-  const thumbSource = await finger.locator('img').getAttribute('src'), thumbQuality = (await finger.locator('.quality-score').innerText()).trim()
+  const thumbSource = await finger.locator('img').getAttribute('src'), thumbQuality = (await finger.locator('.quality-value').innerText()).trim()
   assert.equal(thumbQuality, '97')
   await fingerButton.click(); await preview.waitFor()
   assert.equal((await descriptionValue(preview, '指位')).trim(), '左手食指')

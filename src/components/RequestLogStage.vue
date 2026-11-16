@@ -41,7 +41,7 @@ function eventDescription(event) {
             <div class="event-content"><h4>接收请求</h4>
               <div v-for="event in events.filter(item => item.kind === 'RECEIVED')" :key="event.id" :data-event-id="event.id" :class="{ 'focused-event': focused(event) }">
                 <div class="event-heading"><el-tag size="small" :type="event.status === 'FAILED' ? 'danger' : 'success'">{{ EVENT_STATUS_LABEL[event.status] }}</el-tag></div>
-                <p class="entry-payload">用户 ID：{{ event.payload?.userId || '—' }}；接口类型：{{ event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
+                <p class="entry-payload">申请人 ID：{{ event.payload?.userId || '—' }}；接口类型：{{ event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
                 <p v-if="event.errorCode">错误码：<code>{{ event.errorCode }}</code></p><p v-if="eventDescription(event)">{{ eventDescription(event) }}</p>
                 <p v-if="event.observedAt" class="late-event">采集时间 {{ formatLogTime(event.observedAt) }}，排序与耗时仍使用事件发生时间。</p>
               </div>
@@ -80,7 +80,7 @@ function eventDescription(event) {
             <RequestLogStage v-if="entry.type === 'handling'" :stage="entry.stage" :request-id="requestId" compact :caller="caller" :focused-event="focusedEvent" />
             <template v-else>
               <div class="event-heading"><strong>{{ entry.event.action }}</strong><el-tag v-if="!['CALL_STARTED','PUBLISH_STARTED'].includes(entry.event.kind)" :type="entry.event.status === 'FAILED' ? 'danger' : entry.event.status === 'SUCCESS' ? 'success' : 'info'" size="small">{{ EVENT_STATUS_LABEL[entry.event.status] || '—' }}</el-tag><span v-if="['CALL_STARTED','PUBLISH_STARTED'].includes(entry.event.kind) && entry.event.attemptId" class="event-attempt">{{ entry.event.attemptId }}</span><span v-if="entry.event.note" class="event-note">{{ entry.event.note }}</span></div>
-              <p v-if="entry.event.kind === 'RECEIVED'" class="entry-payload">用户 ID：{{ entry.event.payload?.userId || '—' }}；接口类型：{{ entry.event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
+              <p v-if="entry.event.kind === 'RECEIVED'" class="entry-payload">申请人 ID：{{ entry.event.payload?.userId || '—' }}；接口类型：{{ entry.event.payload?.api || '—' }}<template v-if="caller">；调用方：{{ caller }}</template></p>
               <p v-if="entry.event.errorCode">错误码：<code>{{ entry.event.errorCode }}</code></p><p v-if="eventDescription(entry.event)">{{ eventDescription(entry.event) }}</p>
             </template>
           </div>

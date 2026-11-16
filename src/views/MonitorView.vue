@@ -1,12 +1,15 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { useNavigationStore } from '@/stores/navigation'
 import { useMonitorStore } from '@/stores/monitor'
 import { monitorState, MONITOR_STATUS_META } from '@/constants/monitor'
 import MonitorProbe from '@/components/MonitorProbe.vue'
 import UiIcon from '@/components/UiIcon.vue'
 
 const store = useMonitorStore()
-const statusFilter = ref('all')
+const navigation = useNavigationStore()
+const statusFilter = computed({ get: () => navigation.monitor.status, set: value => { navigation.monitor.status = value } })
 const instances = computed(() => store.items.flatMap(group => group.instances || []))
 const summary = computed(() => [
   { key: 'all', label: '全部', icon: 'server', count: instances.value.length },
@@ -20,8 +23,15 @@ const visibleGroups = computed(() => store.items.map(group => ({ ...group,
 const serviceGroups = computed(() => visibleGroups.value.filter(group => !['postgresql', 'minio'].includes(group.key)))
 const storageRows = computed(() => visibleGroups.value.filter(group => ['postgresql', 'minio'].includes(group.key)).flatMap(group => group.instances.map(instance => ({ ...instance, component: group.name }))))
 const emptyLabel = computed(() => store.error && !store.fetchedAt ? '暂时无法获取服务状态' : instances.value.length ? '暂无匹配的实例或服务' : '暂无服务状态数据')
-onMounted(() => store.start())
-onUnmounted(() => store.stop())
+let active = true
+onBeforeRouteLeave(() => { navigation.monitor.scroll = window.scrollY })
+onMounted(async () => {
+  await store.start()
+  await nextTick()
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  if (active) window.scrollTo(0, navigation.monitor.scroll)
+})
+onUnmounted(() => { active = false; store.stop() })
 </script>
 
 <template>

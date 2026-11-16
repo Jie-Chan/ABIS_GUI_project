@@ -36,13 +36,13 @@ function openImage(record) { imageRecord.value = record; imageVisible.value = tr
           <h2>人脸</h2>
           <div v-if="faceRecords.length" class="face-records">
             <article v-for="record in faceRecords" :key="record.userId" class="image-record">
-              <EnrollmentImage :record="record" @open="openImage" />
+              <EnrollmentImage :record="record" quality-label @open="openImage" />
             </article>
           </div>
           <div v-else class="face-records"><article class="image-record"><div class="enrollment-placeholder face-placeholder" role="img" :aria-label="`申请人 ${detail.userId} · 人脸 · 未入库`">未入库</div></article></div>
         </section>
         <section class="biometric-group" data-modality="finger">
-          <h2>指纹 <span>{{ fingerCount }} 指</span></h2>
+          <div class="biometric-heading"><h2>指纹 <span>{{ fingerCount }} 指</span></h2><span class="quality-legend">质量分</span></div>
             <div v-for="hand in ['左手', '右手']" :key="hand" class="hand-group"><h3>{{ hand }}</h3>
               <div class="finger-grid">
                 <article v-for="slot in fingerSlots.filter(item => item.hand === hand)" :key="slot.key" class="finger-slot" :class="{ 'is-empty': !slot.records.length }" :data-finger="slot.key">
@@ -72,7 +72,7 @@ function openImage(record) { imageRecord.value = record; imageVisible.value = tr
   </el-drawer>
   <el-dialog v-model="imageVisible" title="入库图像详情" width="620px" class="enrollment-preview" align-center append-to-body>
     <template v-if="imageRecord">
-      <EnrollmentImage :record="imageRecord" large />
+      <EnrollmentImage :record="imageRecord" large :quality-label="imageRecord.feature === 'face'" />
       <el-descriptions :column="1" border class="image-metadata">
         <el-descriptions-item label="申请人 ID">{{ imageRecord.userId }}</el-descriptions-item>
         <el-descriptions-item label="质量分">{{ Number.isFinite(imageRecord.qualityScore) ? imageRecord.qualityScore : '—' }}</el-descriptions-item>
@@ -94,6 +94,8 @@ function openImage(record) { imageRecord.value = record; imageVisible.value = tr
 .applicant-id { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap: anywhere; }
 .biometric-group { min-width: 0; margin-top: 12px; }
 .biometric-group h2 { margin: 0 0 12px; font-size: 16px; }
+.biometric-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.quality-legend { margin-bottom: 12px; color: var(--abis-muted); font-size: 12px; }
 .biometric-group h2 span,h4 span { color: var(--abis-muted); font-size: 12px; font-weight: 400; margin-left: 6px; }
 .face-records { display: grid; gap: 12px; }
 .image-record,.finger-slot { min-width: 0; padding: 8px; border: 1px solid var(--abis-border); border-radius: 8px; background: #fff; }
@@ -124,6 +126,7 @@ p { overflow-wrap: anywhere; }
   .current-images { --face-preview-height: 96px; grid-template-columns: minmax(0,1fr); gap: 8px; }
   .biometric-group { margin-top: 0; }
   .biometric-group h2 { margin-bottom: 8px; }
+  .quality-legend { margin-bottom: 8px; }
   .hand-group h3,.unmarked-group h3 { margin: 8px 0 6px; }
   .finger-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .face-records { grid-template-columns: minmax(0,168px); }

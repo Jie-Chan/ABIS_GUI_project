@@ -177,6 +177,7 @@
  * @property {string} result
  * @property {string} sourceIp
  * @property {string} sessionId
+ * @property {string} [failureCategory] 登录失败时允许对当前查看者呈现的失败类别；缺失不猜测
  */
 
 /**
@@ -187,6 +188,8 @@
 
 /**
  * @typedef {Object} LogQueryParams
+ * @property {'receivedAt'} [sortBy='receivedAt'] 对全部匹配记录排序后分页；导出沿用同一排序
+ * @property {'ascending'|'descending'} [sortOrder='descending'] 默认接收时间从新到旧
  * @property {string} [userId] 申请人 ID，去除首尾空白后精确匹配
  * @property {string} [requestId] 业务请求 ID，去除首尾空白后精确匹配；与其他条件取交集
  * @property {string[]} [requestIds] 明确关联的请求集合；成员按完整 ID 匹配，与 userId、requestId 和其他筛选条件取交集

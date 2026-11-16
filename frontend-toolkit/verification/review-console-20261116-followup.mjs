@@ -119,7 +119,7 @@ try {
   await page.getByPlaceholder('输入完整业务请求 ID').press('Enter'); await loaded(); assert.equal(await total(), 1)
   await openLog('REQ-00000016')
   assert.equal((await summaryValue('调用方式').innerText()).trim(), '未记录')
-  assert.equal((await summaryValue('用户 ID').innerText()).trim(), '—')
+  assert.equal((await summaryValue('申请人 ID').innerText()).trim(), '—')
   await shot('historical-mode-unrecorded-sample'); await closeDrawer(log)
   await button('重置').click(); await loaded(); assert.equal(await total(), 15)
 

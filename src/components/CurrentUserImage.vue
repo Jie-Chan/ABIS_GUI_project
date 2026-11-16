@@ -48,9 +48,9 @@ onScopeDispose(() => { sequence++ })
         <el-button v-if="!emptyMessage && state === 'failed'" link type="primary" :aria-label="`${title}重新加载`" @click="loadImage">重新加载</el-button>
       </div>
     </div>
-    <p class="image-user">用户 ID：<span>{{ userId || '—' }}</span></p>
+    <p class="image-user">申请人 ID：<span>{{ userId || '—' }}</span></p>
     <el-dialog v-model="previewVisible" :title="`${title} · ${userId || '—'}`" width="min(900px, calc(100vw - 24px))" align-center append-to-body class="comparison-preview">
-      <p class="preview-user">用户 ID：{{ userId }}<template v-if="feature === 'finger'"> · {{ fingerLabel(image?.fingerPosition || fingerPosition) }}</template></p>
+      <p class="preview-user">申请人 ID：{{ userId }}<template v-if="feature === 'finger'"> · {{ fingerLabel(image?.fingerPosition || fingerPosition) }}</template></p>
       <img v-if="previewVisible && imageLoaded" class="preview-image" :src="image.imageUrl" :alt="`${title} ${userId}`" />
       <template #footer><el-button @click="previewVisible = false">关闭预览</el-button></template>
     </el-dialog>

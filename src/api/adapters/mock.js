@@ -297,7 +297,7 @@ export default {
       return { ...row, calledAt: formatLogTime(row.receivedAt), userId: row.userId || '—', sourceIp: row.sourceIp || '—', durationLabel: duration.label, durationText: duration.text }
     })
     return toCsvBlob(rows, [
-      ['calledAt', '接收时间'], ['sourceIp', '请求来源 IP'], ['requestId', '请求 ID'], ['userId', '用户 ID'],
+      ['calledAt', '接收时间'], ['sourceIp', '请求来源 IP'], ['requestId', '请求 ID'], ['userId', '申请人 ID'],
       ['caller', '调用方标识'], ['api', '接口类型'], ['mode', '链路', { sync: '同步', async: '异步' }],
       // feature / result 在记录里存的是枚举 key（'face' / 'success'），
       // 直接落表会在中文表头下写出英文枚举值。用常量里的 key→label 快查表转中文，
@@ -329,10 +329,10 @@ export default {
  *   'YYYY-MM-DD HH:mm:ss' 才成立。传 Date 对象或 'YYYY-MM-DD' 不报错，
  *   只会静默过滤掉全部记录 —— 调用方须先用 formatDateTime 归一化。
  */
-function filterLogs(list, { startTime, endTime, userId = '', requestId = '', requestIds = [], api, feature, result, publication, minCost, maxCost } = {}) {
+function filterLogs(list, { startTime, endTime, userId = '', requestId = '', requestIds = [], api, feature, result, publication, minCost, maxCost, sortOrder = 'descending' } = {}) {
   const applicant = userId.trim()
   const request = requestId.trim()
-  return list.map(projectRequest).filter((r) => {
+  const filtered = list.map(projectRequest).filter((r) => {
     if (r.historical && !applicant && !request && !requestIds.length) return false
     if (applicant && r.userId !== applicant) return false
     if (request && r.requestId !== request) return false
@@ -346,6 +346,13 @@ function filterLogs(list, { startTime, endTime, userId = '', requestId = '', req
     if (minCost != null && (r.costMs == null || r.costMs < minCost)) return false
     if (maxCost != null && (r.costMs == null || r.costMs > maxCost)) return false
     return true
+  })
+  const direction = sortOrder === 'ascending' ? 1 : -1
+  return filtered.sort((a, b) => {
+    const first = Date.parse(a.receivedAt), second = Date.parse(b.receivedAt)
+    if (!Number.isFinite(first)) return Number.isFinite(second) ? 1 : a.requestId.localeCompare(b.requestId)
+    if (!Number.isFinite(second)) return -1
+    return (first - second || a.requestId.localeCompare(b.requestId)) * direction
   })
 }
 

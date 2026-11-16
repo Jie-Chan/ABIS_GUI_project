@@ -6,6 +6,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api'
 import { hasPermission as checkPermission } from '@/constants/roles'
+import { useNavigationStore } from '@/stores/navigation'
 
 const TOKEN_KEY = 'abis_console_token'
 
@@ -23,6 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(username, password) {
     const result = await api.login(username, password)
+    useNavigationStore().reset()
     account.value = result.account
     token.value = result.token
     localStorage.setItem(TOKEN_KEY, result.token)
@@ -38,6 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearSession() {
+    useNavigationStore().reset()
     account.value = null
     token.value = ''
     localStorage.removeItem(TOKEN_KEY)
@@ -49,5 +52,12 @@ export const useAuthStore = defineStore('auth', () => {
     account.value = session.account
   }
 
-  return { account, token, isLoggedIn, role, login, logout, hasPermission, clearSession, refreshAccount }
+  let restoring
+  async function restoreSession() {
+    if (isLoggedIn.value || !token.value) return
+    if (!restoring) restoring = refreshAccount().catch(() => clearSession()).finally(() => { restoring = null })
+    await restoring
+  }
+
+  return { account, token, isLoggedIn, role, login, logout, hasPermission, clearSession, refreshAccount, restoreSession }
 })

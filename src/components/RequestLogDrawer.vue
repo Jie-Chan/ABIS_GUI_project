@@ -4,6 +4,8 @@ import RequestLogMessages from '@/components/RequestLogMessages.vue'
 import RequestLogProcess from '@/components/RequestLogProcess.vue'
 import RequestImageComparison from '@/components/RequestImageComparison.vue'
 import { LOG_RESULT_LABEL, LOG_RESULT_TAG_TYPE, PUBLICATION_LABEL, PUBLICATION_TYPE } from '@/constants/log'
+import { ElMessage } from 'element-plus'
+import { copyText } from '@/utils/clipboard'
 import { durationMs, formatDuration, requestDuration, formatLogTime, handlingStages, handlingSpan, projectRequest, responseForEvent, requestForAttempt, sortEvents } from '@/utils/log'
 
 const visible = defineModel({ type: Boolean, default: false })
@@ -23,6 +25,9 @@ const requestBody = computed(() => record.value ? requestForAttempt(record.value
 const responseBody = computed(() => record.value && selectedResponse.value ? responseForEvent(record.value, selectedResponse.value) : null)
 const businessSummary = computed(() => {
   if (!record.value) return ''
+  if (needsReview.value) return exceptionEvent.value?.errorCode === 'ABIS_TIMEOUT'
+    ? '等待 ABIS 响应超时，执行结果未确认。'
+    : `执行结果未确认。${!exceptionInfo.value.historical && exceptionEvent.value?.description || ''}`
   const action = { enrollment: '注册', identification: '查重', delete: '删除', comparison: '比对', verification: '核验' }[record.value.api] || '业务处理'
   if (record.value.result === 'success') {
     if (record.value.publication === 'pending') return `${action}成功 · 响应待发布`
@@ -45,6 +50,11 @@ const exceptionInfo = computed(() => {
   return { event: current || errors.at(-1) || null, historical: !current }
 })
 const exceptionEvent = computed(() => exceptionInfo.value.event)
+const needsReview = computed(() => record.value?.mode === 'async' && record.value?.result === 'unknown')
+async function copyRequestId() {
+  try { await copyText(record.value.requestId); ElMessage.success('请求 ID 已复制') }
+  catch (error) { ElMessage.error(error.message || '复制失败，请选择请求 ID 手动复制') }
+}
 async function viewException() {
   activeTab.value = 'process'
   if (attempts.value.includes(exceptionEvent.value?.attemptId)) selectedAttemptId.value = exceptionEvent.value.attemptId
@@ -61,13 +71,13 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
       <table ref="summaryRef" class="request-summary" aria-label="请求信息">
         <colgroup><col class="label-column"><col><col class="label-column"><col></colgroup>
         <tbody>
-          <tr><th>请求 ID</th><td colspan="3" class="log-id">{{ record.requestId || '—' }}</td></tr>
-          <tr><th>用户 ID</th><td class="log-id">{{ record.userId || '—' }}</td><th>接口类型</th><td>{{ record.operationLabel }}</td></tr>
+          <tr><th>请求 ID</th><td colspan="3"><div class="request-id-actions"><span class="log-id">{{ record.requestId || '—' }}</span><el-button v-if="record.requestId" link type="primary" @click="copyRequestId">复制请求 ID</el-button></div></td></tr>
+          <tr><th>申请人 ID</th><td class="log-id">{{ record.userId || '—' }}</td><th>接口类型</th><td>{{ record.operationLabel }}</td></tr>
           <tr><th>接收时间</th><td colspan="3">{{ formatLogTime(record.receivedAt) }}</td></tr>
           <tr><th>调用方式</th><td colspan="3">{{ callMode }}</td></tr>
-          <tr><th>执行状态</th><td :colspan="record.mode === 'sync' ? 3 : 1"><el-tag :type="LOG_RESULT_TAG_TYPE[record.result] || 'info'">{{ LOG_RESULT_LABEL[record.result] || '待人工核查' }}</el-tag><span v-if="record.result === 'unknown'" class="state-note">业务结果未确认，请人工核查。</span></td><template v-if="record.mode !== 'sync'"><th>响应发布状态</th><td><el-tag :type="PUBLICATION_TYPE[record.publication] || 'info'">{{ PUBLICATION_LABEL[record.publication] || '—' }}</el-tag></td></template></tr>
+          <tr><th>执行状态</th><td :colspan="record.mode === 'sync' ? 3 : 1"><el-tag :type="LOG_RESULT_TAG_TYPE[record.result] || 'info'">{{ LOG_RESULT_LABEL[record.result] || '待人工核查' }}</el-tag></td><template v-if="record.mode !== 'sync'"><th>响应发布状态</th><td><el-tag :type="PUBLICATION_TYPE[record.publication] || 'info'">{{ PUBLICATION_LABEL[record.publication] || '—' }}</el-tag></td></template></tr>
           <tr><th>{{ duration.label === '总耗时' ? '请求总耗时' : '已用时' }}</th><td :colspan="record.mode === 'sync' ? 3 : 1" data-testid="request-duration">{{ duration.text }}</td><template v-if="record.mode !== 'sync'"><th>ABIS 接口处理耗时</th><td><div v-for="handling in handlingDurations" :key="handling.id" data-testid="processing-duration"><small v-if="handlingDurations.length > 1">{{ handling.attemptId }}：</small>{{ formatDuration(durationMs(handling.startedAt, handling.endedAt)) }}</div><span v-if="!handlingDurations.length">无数据</span></td></template></tr>
-          <tr><th>业务结果摘要</th><td colspan="3" data-testid="business-summary">{{ businessSummary }}<span v-if="exceptionEvent" class="summary-exception" :class="{ historical: exceptionInfo.historical }"><code>{{ exceptionEvent.errorCode }}</code><el-button link type="primary" @click="viewException">{{ exceptionInfo.historical ? '历史异常' : '查看事件' }}</el-button></span></td></tr>
+          <tr><th>业务结果摘要</th><td colspan="3" data-testid="business-summary">{{ businessSummary }}<span v-if="exceptionEvent" class="summary-exception" :class="{ historical: exceptionInfo.historical }"><code>{{ exceptionEvent.errorCode }}</code><el-button link type="primary" @click="viewException">{{ exceptionInfo.historical ? '历史异常' : '查看事件' }}</el-button></span><p v-if="needsReview" class="review-guide">请结合请求 ID、申请人 ID 和接收时间核对 ABIS 侧处理记录。</p></td></tr>
         </tbody>
       </table>
       <div class="request-detail-region" :class="{ 'is-image-tab': activeTab === 'images' }">
@@ -109,7 +119,9 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
 .request-tabs :deep(.el-tabs__header) { margin: 0; padding: 0 16px; background: #f7f9fc; }.request-tabs :deep(.el-tabs__content) { min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior-y: contain; }
 .summary-exception { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: 12px; color: var(--el-color-warning); }
 .summary-exception.historical { color: var(--abis-muted); }
-.state-note { display:block; color:var(--el-color-warning); font-size:12px; margin-top:4px; }
+.request-id-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
+.request-id-actions .el-button { min-height: 22px; font-size: 12px; }
+.review-guide { margin: 4px 0 0; color: var(--abis-muted); font-size: 12px; }
 .response-choice { margin-bottom: 16px; }.response-choice label { display: block; margin-bottom: 8px; color: var(--abis-muted); font-size: 12px; }.response-selector { width: 100%; }
 .request-tabs { display: flex; flex-direction: column; min-width: 0; min-height: 0; }.request-tabs :deep(.el-tabs__item) { font-size: 14px; }
 @media(max-height:600px) {
