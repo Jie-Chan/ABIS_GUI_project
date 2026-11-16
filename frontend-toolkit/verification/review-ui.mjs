@@ -84,7 +84,9 @@ const checkConfirmation=async label=>{
 }
 try{
  await page.goto(`${base}/login`)
- await page.getByRole('heading',{name:'欢迎登录'}).waitFor()
+ await page.getByRole('heading',{name:'ABIS 管理控制台',exact:true}).waitFor()
+ assert.equal(await page.getByText('欢迎登录',{exact:true}).count(),0)
+ assert.equal(await page.locator('.preview-footer,.login-content input[placeholder]').count(),0)
  const bounds=await page.locator('.login-content').boundingBox()
  assert.ok(Math.abs(bounds.x+bounds.width/2-800)<1)
  assert.equal(await page.locator('.login-card,.login-brand-panel').count(),0)
@@ -192,6 +194,7 @@ try{
  await page.locator('.el-message-box').getByRole('button',{name:'删除',exact:true}).click()
  await page.getByText('账户已删除',{exact:true}).waitFor()
  await nav('匹配阈值配置','threshold')
+ const originThresholds=await page.evaluate(async()=>(await import('/src/api/index.js')).default.getThresholds())
  const face=page.locator('.threshold-field input').first()
  assert.ok(await page.getByRole('button',{name:'保存修改',exact:true}).isDisabled())
  await face.fill('59');await face.blur()
@@ -202,11 +205,18 @@ try{
  assert.equal(await face.inputValue(),'60')
  await page.getByRole('button',{name:'保存修改',exact:true}).click()
  await checkConfirmation('threshold confirmation')
- assert.equal(await page.locator('.confirmation-details p').count(),2)
+ const thresholdConfirmation=page.getByRole('dialog',{name:'保存阈值修改？',exact:true})
+ await thresholdConfirmation.waitFor()
+ assert.deepEqual(await thresholdConfirmation.locator('.confirmation-details p').allTextContents(),[
+   `人脸 1:N 去重相似度阈值：${originThresholds.face} → 60`,
+   `指纹 1:N 去重相似度阈值：${originThresholds.finger} → 60`,
+ ])
+ assert.equal(await thresholdConfirmation.locator('.confirmation-question').count(),0)
+ assert.deepEqual((await thresholdConfirmation.locator('.el-message-box__btns button').allTextContents()).map(text=>text.trim()),['取消','保存'])
  await cancel()
  assert.equal(await face.inputValue(),'60')
  await page.getByRole('button',{name:'保存修改',exact:true}).click()
- await page.locator('.el-message-box').getByRole('button',{name:'确定',exact:true}).click();await waitLoaded()
+ await thresholdConfirmation.getByRole('button',{name:'保存',exact:true}).click();await waitLoaded()
  assert.ok(await page.getByRole('button',{name:'保存修改',exact:true}).isDisabled())
  pass('threshold validation, fill-only defaults, cancelled confirmation and explicit save')
  await nav('日志查询','logs')

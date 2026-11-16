@@ -108,7 +108,7 @@
  * @property {number} id
  * @property {string|null} userId 业务对象 ID，字符串保留前导零；未指定对象的 1:N 识别不回填候选人
  * @property {string} requestId 逻辑请求唯一标识，重投、调用尝试和发布重试归入同一请求
- * @property {'sync'|'async'} mode 同步一个 ABIS_HANDLING；异步三个顶层阶段，调用阶段内嵌 ABIS_HANDLING
+ * @property {'sync'|'async'|null} [mode] 复用现有调用方式；历史未记录时缺失或为 null，界面显示「未记录」。同步一个 ABIS_HANDLING；异步三个顶层阶段，调用阶段内嵌 ABIS_HANDLING
  * @property {string} scenario Mock 场景说明
  * @property {number} collectionRound 明确采集轮次；1 为首次人脸/指纹采集，2 及以上为后续重采或变更
  * @property {string} receivedAt 接收时间，带时区 ISO 格式

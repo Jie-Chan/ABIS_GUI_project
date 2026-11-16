@@ -49,10 +49,15 @@ const noOverflow = async () => assert.ok(await page.evaluate(() => document.docu
 
 try {
   await page.goto(`${base}/login`)
-  await page.getByRole('heading', { name: '欢迎登录' }).waitFor()
-  assert.equal(await page.locator('.login-backdrop .biometric-network').count(), 1)
+  await page.getByRole('heading', { name: 'ABIS 管理控制台', exact: true }).waitFor()
+  assert.equal(await page.getByText('欢迎登录', { exact: true }).count(), 0)
+  assert.ok(await page.locator('.login-backdrop img').count() > 0)
+  await page.waitForFunction(() => [...document.querySelectorAll('.login-backdrop img')].every(image => image.complete && image.naturalWidth > 0))
+  assert.ok(await page.locator('.login-backdrop img').evaluateAll(images => images.every(image => image.alt === '')))
+  assert.equal(await page.locator('.login-backdrop').getAttribute('aria-hidden'), 'true')
   for (const width of [1600, 1280, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 })
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const bounds = await page.locator('.login-content').boundingBox()
     assert.ok(Math.abs(bounds.x + bounds.width / 2 - width / 2) < 1)
     await noOverflow()
@@ -96,7 +101,10 @@ try {
 
   await save().click()
   await dialog.locator('.el-form-item__error').first().waitFor()
-  assert.equal(await dialog.locator('.el-form-item__error').count(), 3)
+  assert.equal(await dialog.locator('.el-form-item__error, #new-password-requirement.is-error').count(), 3)
+  for (const message of ['请输入原密码', '请输入新密码', '请再次输入新密码']) {
+    assert.equal(await dialog.getByText(message, { exact: true }).count(), 1)
+  }
   assert.equal(await page.evaluate(() => window.passwordCalls.length), 0)
   pass('empty password form is rejected without an API call')
   await fillPassword('admin123', 'abis-preview-next', 'different')

@@ -1,11 +1,10 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { h, ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { buildConfirmationMessage } from '@/utils/confirmation'
-import { CONFIRM_TITLE } from '@/constants/nav'
 import {
   THRESHOLD_MIN,
   THRESHOLD_MAX,
@@ -111,16 +110,16 @@ async function load() {
 async function saveThresholds(values) {
   if (writeBlocked.value || !dirty.value) return
   const payload = { ...values }
+  const changes = THRESHOLD_KEYS.filter(({ key }) => payload[key] !== origin.value[key])
 
   confirming.value = true
   try {
     await ElMessageBox.confirm(
-      buildConfirmationMessage('确认保存阈值配置？', [
-        `人脸阈值：${origin.value.face} → ${payload.face}`,
-        `指纹阈值：${origin.value.finger} → ${payload.finger}`,
-      ]),
-      CONFIRM_TITLE,
-      { type: 'warning' }
+      h('div', { class: 'confirmation-details' }, changes.map(({ key, label }) =>
+        h('p', `${label}：${origin.value[key]} → ${payload[key]}`)
+      )),
+      '保存阈值修改？',
+      { type: 'warning', confirmButtonText: '保存', cancelButtonText: '取消' }
     )
   } catch {
     return
@@ -160,8 +159,11 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="threshold-page">
     <el-card v-loading="loading">
+      <template #header>
+        <h1 class="threshold-title">匹配阈值配置</h1>
+      </template>
       <el-alert
         v-if="error"
         :title="error"
@@ -171,49 +173,55 @@ onMounted(load)
       />
 
       <el-form label-position="top" class="threshold-form">
-        <el-form-item v-for="k in THRESHOLD_KEYS" :key="k.key" :label="k.label" class="threshold-field">
-          <el-input-number
-            v-model="form[k.key]"
-            v-sync-disabled="writeBlocked"
-            :min="THRESHOLD_MIN"
-            :max="THRESHOLD_MAX"
-            :step="1"
-            step-strictly
-            :disabled="writeBlocked"
-          />
-          <span class="bound">协议生效下限：{{ k.protocolLowerBound }}</span>
-          <span v-if="lowerBoundHints.find(hint => hint.key === k.key)" class="field-error" role="alert">{{ lowerBoundHints.find(hint => hint.key === k.key).text }}</span>
-        </el-form-item>
+        <div class="threshold-fields">
+          <el-form-item v-for="k in THRESHOLD_KEYS" :key="k.key" :label="k.label" class="threshold-field">
+            <el-input-number
+              v-model="form[k.key]"
+              v-sync-disabled="writeBlocked"
+              :min="THRESHOLD_MIN"
+              :max="THRESHOLD_MAX"
+              :step="1"
+              step-strictly
+              :disabled="writeBlocked"
+            />
+            <span class="bound">协议生效下限：{{ k.protocolLowerBound }}</span>
+            <span v-if="lowerBoundHints.find(hint => hint.key === k.key)" class="field-error" role="alert">{{ lowerBoundHints.find(hint => hint.key === k.key).text }}</span>
+          </el-form-item>
+        </div>
+
+        <p class="threshold-rule">调用方指定阈值时，以请求值为准。</p>
 
         <el-form-item class="threshold-actions">
           <el-button type="primary" :loading="saving" :disabled="writeBlocked || !dirty || !valid" @click="handleSave">保存修改</el-button>
           <el-button :disabled="writeBlocked" @click="handleReset">填入默认值</el-button>
-          <span class="bound default-hint">保存后生效</span>
           <span v-if="recoveryRequired" class="edit-state" role="status">配置待确认</span>
           <span v-else-if="dirty" class="edit-state" role="status">未保存</span>
         </el-form-item>
       </el-form>
-
-      <p class="note">
-        调用方指定阈值时，以请求值为准。
-      </p>
     </el-card>
   </div>
 </template>
 
 <style scoped>
-.threshold-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; max-width: 860px; }
+.threshold-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+.threshold-page > :deep(.el-card > .el-card__header) { padding: 14px 20px 0; border-bottom: 0; }
+.threshold-page > :deep(.el-card > .el-card__body) { padding: 20px; }
+.threshold-form { width: 100%; }
+.threshold-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .threshold-field { padding: 22px; margin: 0; background: #f7f9fc; border: 1px solid var(--abis-border); border-radius: 8px; }
 .threshold-field :deep(.el-form-item__label) { margin-bottom: 18px; color: #3f526e; font-size: 13px; }
 .threshold-field :deep(.el-form-item__content) { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .threshold-field :deep(.el-input-number) { width: 180px; max-width: 100%; }
 .threshold-field :deep(.el-input__inner) { font-size: 20px; font-weight: 600; }
 .threshold-field :deep(.el-input__wrapper) { height: 44px; }
-.field-error { color: var(--el-color-danger); font-size: 12px; line-height: 1.7; }.default-hint { margin-left: 12px; }
+.field-error { color: var(--el-color-danger); font-size: 12px; line-height: 1.7; }
 .bound { color: #718096; font-size: 11px; }
 .edit-state { margin-left: 12px; color: var(--el-color-warning); font-size: 13px; }
 .threshold-actions :deep(.el-form-item__content) { gap: 8px 0; }
-.threshold-actions { grid-column: 1 / -1; margin-bottom: 0; }
-.note { margin: 24px 0 0; color: #718096; font-size: 12px; line-height: 1.8; }
-@media (max-width: 900px) { .threshold-form { grid-template-columns: 1fr; } }
+.threshold-actions { margin-bottom: 0; }
+.threshold-rule { margin: 12px 0 16px; color: #718096; font-size: 12px; line-height: 1.8; }
+@media (max-width: 900px) { .threshold-fields { grid-template-columns: 1fr; } }
+@media (max-width: 767px) {
+  .threshold-page > :deep(.el-card > .el-card__header), .threshold-page > :deep(.el-card > .el-card__body) { padding-inline: 16px; }
+}
 </style>

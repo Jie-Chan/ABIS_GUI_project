@@ -165,7 +165,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
           <template #default="{ row }"><span class="log-id">{{ row.userId || '—' }}</span></template>
         </el-table-column>
         <el-table-column label="接口类型" min-width="96">
-          <template #default="{ row }">{{ row.operationLabel }}<small class="request-scenario">{{ row.mode === 'sync' ? '同步' : '异步' }}</small></template>
+          <template #default="{ row }">{{ row.operationLabel }}</template>
         </el-table-column>
         <el-table-column label="接收时间" min-width="160"><template #default="{ row }">{{ formatLogTime(row.receivedAt) }}</template></el-table-column>
         <el-table-column label="请求来源 IP" min-width="112"><template #default="{ row }"><span class="log-id">{{ row.sourceIp || '—' }}</span></template></el-table-column>
@@ -177,7 +177,7 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
         </el-table-column>
         <el-table-column label="响应发布状态" width="112"><template #default="{ row }"><el-tag v-if="row.mode !== 'sync'" :type="PUBLICATION_TYPE[row.publication] || 'info'">{{ PUBLICATION_LABEL[row.publication] || '—' }}</el-tag><span v-else>—</span></template></el-table-column>
         <el-table-column label="请求耗时" width="90">
-          <template #default="{ row }"><small class="request-scenario">{{ requestDuration(row, now).label }}</small>{{ requestDuration(row, now).text }}</template>
+          <template #default="{ row }"><small v-if="requestDuration(row, now).label === '已用时'" class="duration-label">已用时</small><span class="duration-value">{{ requestDuration(row, now).text }}</span></template>
         </el-table-column>
         <el-table-column label="操作" width="64" fixed="right">
           <template #default="{ row }">
@@ -206,7 +206,8 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
 <style scoped>
 .return-applicant { margin-bottom: 8px; }
 .log-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
-.request-scenario { display: block; margin-top: 4px; color: var(--abis-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.duration-label { display: block; color: var(--abis-muted); font-size: 11px; line-height: 1.6; }
+.duration-value { white-space: nowrap; }
 .request-table :deep(.el-table__row) { cursor: pointer; }
 .attention-stage, .collection-hint { color: var(--el-color-warning); }
 .collection-hint { display: block; font-size: 11px; }

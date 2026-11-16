@@ -110,8 +110,7 @@ async function handleLogout() {
     </el-header>
 
     <el-main class="workspace-main" :class="{ 'records-workspace': isRecordsPage }">
-      <div v-if="isSettingsPage && route.name !== 'accounts'" class="breadcrumb" aria-label="当前位置"><span>设置</span><b>/</b><strong>{{ currentTitle }}</strong></div>
-      <div v-if="!['logs', 'applicants', 'monitor', 'host-resources', 'audits', 'accounts', 'recapture-acceptance'].includes(route.name)" class="page-intro">
+      <div v-if="!['logs', 'applicants', 'monitor', 'host-resources', 'audits', 'accounts', 'threshold', 'recapture-acceptance'].includes(route.name)" class="page-intro">
         <span class="page-icon"><UiIcon :name="route.name" :size="25" /></span>
         <div>
           <h1>{{ currentTitle }}</h1>
@@ -147,10 +146,6 @@ async function handleLogout() {
 .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #acbdd4; }
 .workspace-main { --abis-workspace-top: 32px; width: 100%; min-width: 0; padding: 32px 48px 48px; overflow: visible; }
-.breadcrumb { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 12px; }
-.breadcrumb > span { color: #7c8ba1; }
-.breadcrumb b { color: #b6c1d0; font-weight: 400; }
-.breadcrumb strong { font-weight: 500; }
 .page-intro { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .page-intro > div { min-width: 0; }
 .page-icon { display: grid; place-items: center; width: 50px; height: 50px; flex-shrink: 0; border: 1px solid #d5e2f4; border-radius: 12px; background: #e9f0fb; color: var(--el-color-primary); }

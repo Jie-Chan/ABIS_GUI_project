@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 
 const base = new URL(process.env.ABIS_PREVIEW_URL || 'http://127.0.0.1:5186').origin
 assert.match(await (await fetch(`${base}/src/api/index.js`)).text(), /"VITE_USE_MOCK": "true"/)
-const out = './qa-output/current-spec'
+const out = process.env.ABIS_QA_OUTPUT_DIR || './qa-output/current-spec'
 await fs.mkdir(out, { recursive: true })
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1422, height: 804 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce' })
@@ -189,11 +189,11 @@ try {
   const fields = page.locator('.threshold-field input'), save = button('保存修改')
   await fields.nth(0).fill('59'); await fields.nth(0).blur(); assert.equal(await save.isDisabled(), true); assert.match(await page.locator('.threshold-field').nth(0).innerText(), /协议生效下限 60/)
   await fields.nth(0).fill('60'); await fields.nth(1).fill('39'); await fields.nth(1).blur(); assert.equal(await save.isDisabled(), true); assert.match(await page.locator('.threshold-field').nth(1).innerText(), /协议生效下限 40/)
-  await fields.nth(1).fill('40'); await fields.nth(1).blur(); assert.equal(await save.isEnabled(), true); await save.click(); const confirm = page.getByRole('dialog', { name: '二次确认', exact: true }); await confirm.waitFor(); assert.match(await confirm.innerText(), /指纹阈值：.*→ 40/); await confirm.getByRole('button', { name: '确定', exact: true }).click(); await loaded()
+  await fields.nth(1).fill('40'); await fields.nth(1).blur(); assert.equal(await save.isEnabled(), true); await save.click(); const confirm = page.getByRole('dialog', { name: '保存阈值修改？', exact: true }); await confirm.waitFor(); assert.match(await confirm.innerText(), /指纹 1:N 去重相似度阈值：\d+ → 40/); assert.equal(await confirm.locator('.confirmation-details p').count(), 2); assert.equal(await confirm.locator('.confirmation-question').count(), 0); await confirm.getByRole('button', { name: '保存', exact: true }).click(); await loaded()
   await button('填入默认值').click(); assert.deepEqual(await fields.evaluateAll(inputs => inputs.map(input => input.value)), ['60','60']); assert.match(await page.locator('.edit-state').innerText(), /未保存/)
   await page.getByRole('menuitem', { name: '日志查询', exact: true }).click(); const leave = page.getByRole('dialog', { name: '未保存的修改', exact: true }); await leave.waitFor(); await leave.getByRole('button', { name: '放弃修改', exact: true }).click(); await loaded()
   const unchanged = await page.evaluate(async () => (await import('/src/api/index.js')).default.getThresholds()); assert.equal(unchanged.finger, 40)
-  await button('设置').click(); await page.getByRole('menuitem', { name: '匹配阈值配置', exact: true }).click(); await loaded(); await button('填入默认值').click(); await save.click(); await confirm.getByRole('button', { name: '确定', exact: true }).click(); await loaded(); assert.deepEqual(await page.evaluate(async () => (await import('/src/api/index.js')).default.getThresholds()), { face: 60, finger: 60 })
+  await button('设置').click(); await page.getByRole('menuitem', { name: '匹配阈值配置', exact: true }).click(); await loaded(); await button('填入默认值').click(); await save.click(); await confirm.waitFor(); assert.deepEqual(await confirm.locator('.confirmation-details p').allTextContents(), ['指纹 1:N 去重相似度阈值：40 → 60']); await confirm.getByRole('button', { name: '保存', exact: true }).click(); await loaded(); assert.deepEqual(await page.evaluate(async () => (await import('/src/api/index.js')).default.getThresholds()), { face: 60, finger: 60 })
   const rejected = await page.evaluate(async () => { const api = (await import('/src/api/index.js')).default; return Promise.all([{face:59,finger:60},{face:60,finger:39},{face:60,finger:40.5}].map(async payload => { try { await api.updateThresholds(payload); return false } catch { return true } })) }); assert.deepEqual(rejected, [true,true,true])
   pass('threshold lower bounds disable saving immediately; boundary saves, defaults remain draft, discard/save and adapter validation work')
 

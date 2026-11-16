@@ -13,6 +13,7 @@ const processRef = ref(null)
 const selectedAttemptId = ref(null)
 const activeTab = ref('process')
 const record = computed(() => props.record ? projectRequest(props.record) : null)
+const callMode = computed(() => record.value?.mode === 'sync' ? '同步' : record.value?.mode === 'async' ? '异步' : '未记录')
 const duration = computed(() => record.value ? requestDuration(record.value, props.now) : null)
 const handlingDurations = computed(() => record.value ? handlingStages(record.value).map(stage => ({ ...handlingSpan(stage), attemptId: stage.attemptId, id: stage.instanceId })) : [])
 const responses = computed(() => record.value ? sortEvents(handlingStages(record.value).flatMap(stage => stage.events || []).filter(event => event.kind === 'RESPONDED')) : [])
@@ -61,8 +62,9 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
         <colgroup><col class="label-column"><col><col class="label-column"><col></colgroup>
         <tbody>
           <tr><th>请求 ID</th><td colspan="3" class="log-id">{{ record.requestId || '—' }}</td></tr>
-          <tr><th>用户 ID</th><td class="log-id">{{ record.userId || '—' }}</td><th>接口类型</th><td>{{ record.operationLabel }} <span class="muted">{{ record.mode === 'sync' ? '同步' : '异步' }}</span></td></tr>
+          <tr><th>用户 ID</th><td class="log-id">{{ record.userId || '—' }}</td><th>接口类型</th><td>{{ record.operationLabel }}</td></tr>
           <tr><th>接收时间</th><td colspan="3">{{ formatLogTime(record.receivedAt) }}</td></tr>
+          <tr><th>调用方式</th><td colspan="3">{{ callMode }}</td></tr>
           <tr><th>执行状态</th><td :colspan="record.mode === 'sync' ? 3 : 1"><el-tag :type="LOG_RESULT_TAG_TYPE[record.result] || 'info'">{{ LOG_RESULT_LABEL[record.result] || '待人工核查' }}</el-tag><span v-if="record.result === 'unknown'" class="state-note">业务结果未确认，请人工核查。</span></td><template v-if="record.mode !== 'sync'"><th>响应发布状态</th><td><el-tag :type="PUBLICATION_TYPE[record.publication] || 'info'">{{ PUBLICATION_LABEL[record.publication] || '—' }}</el-tag></td></template></tr>
           <tr><th>{{ duration.label === '总耗时' ? '请求总耗时' : '已用时' }}</th><td :colspan="record.mode === 'sync' ? 3 : 1" data-testid="request-duration">{{ duration.text }}</td><template v-if="record.mode !== 'sync'"><th>ABIS 接口处理耗时</th><td><div v-for="handling in handlingDurations" :key="handling.id" data-testid="processing-duration"><small v-if="handlingDurations.length > 1">{{ handling.attemptId }}：</small>{{ formatDuration(durationMs(handling.startedAt, handling.endedAt)) }}</div><span v-if="!handlingDurations.length">无数据</span></td></template></tr>
           <tr><th>业务结果摘要</th><td colspan="3" data-testid="business-summary">{{ businessSummary }}<span v-if="exceptionEvent" class="summary-exception" :class="{ historical: exceptionInfo.historical }"><code>{{ exceptionEvent.errorCode }}</code><el-button link type="primary" @click="viewException">{{ exceptionInfo.historical ? '历史异常' : '查看事件' }}</el-button></span></td></tr>
@@ -108,7 +110,6 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
 .summary-exception { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: 12px; color: var(--el-color-warning); }
 .summary-exception.historical { color: var(--abis-muted); }
 .state-note { display:block; color:var(--el-color-warning); font-size:12px; margin-top:4px; }
-.muted { color: var(--abis-muted); font-size: 12px; }
 .response-choice { margin-bottom: 16px; }.response-choice label { display: block; margin-bottom: 8px; color: var(--abis-muted); font-size: 12px; }.response-selector { width: 100%; }
 .request-tabs { display: flex; flex-direction: column; min-width: 0; min-height: 0; }.request-tabs :deep(.el-tabs__item) { font-size: 14px; }
 @media(max-height:600px) {

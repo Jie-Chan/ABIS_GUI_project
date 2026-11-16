@@ -33,7 +33,7 @@ async function openLog(id) {
   await log.waitFor()
   await page.waitForFunction(() => Math.abs(document.querySelector('.request-log-drawer').getBoundingClientRect().right - innerWidth) < 1)
 }
-async function closeDrawer(drawer) { await drawer.getByRole('button', { name: '关闭', exact: true }).click(); await drawer.waitFor({ state: 'hidden' }) }
+async function closeDrawer(drawer) { await drawer.locator('.el-drawer__close-btn').click(); await drawer.waitFor({ state: 'hidden' }) }
 async function openPerson(id) {
   await page.locator('.applicants-page .el-table__row').filter({ hasText: id }).getByRole('button', { name: '查看详情', exact: true }).click()
   await person.waitFor(); await loaded()
@@ -134,7 +134,7 @@ try {
     await go('/applicants'); await openPerson('U001'); await drawerGap(person, '.applicant-summary', 'applicant')
     await person.getByRole('tab', { name: '入库变更记录', exact: true }).click(); await drawerGap(person, '.applicant-summary', 'applicant changes')
     await person.locator('.el-drawer__body').evaluate(node => node.scrollTop = node.scrollHeight)
-    await person.getByRole('button', { name: '关闭', exact: true }).click(); await person.waitFor({ state: 'hidden' })
+    await closeDrawer(person)
   }
   pass('both detail drawers use a 16–20px title-to-summary gap, including sync requests and tab changes at all three required viewports')
   pass('face/finger titles, finger labels and equal-height frames align while candidate switches retain image and title positions on desktop and 624px')

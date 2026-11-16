@@ -40,18 +40,18 @@ function buildRequest(sample, index, base) {
   const requestBody = { userId, feature, api, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}), ...(api === 'enrollment' ? { images: [{ imageId: `IMAGE-${requestId}`, format: 'image/jpeg' }] } : {}) }
   const executionId = 'execution-attempt-1', attemptId = 'attempt-1'
   const handling = { ...stage('ABIS_HANDLING', mode === 'sync' ? 0 : 70, 250, [
-    event('RECEIVED', '接收请求', mode === 'sync' ? 0 : 70, 'SUCCESS', { attemptId, requestBody: mode === 'sync' ? requestBody : undefined, payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) }, description: 'ABIS 入口记录本次业务对象和接口类型。' }),
+    event('RECEIVED', '接收请求', mode === 'sync' ? 0 : 70, 'SUCCESS', { attemptId, requestBody: mode === 'sync' ? requestBody : undefined, payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) } }),
     event('PROCESSING_STARTED', '业务处理开始', 90, 'STARTED', { attemptId, executionId }),
     event('PROCESSING_ENDED', '业务处理结束', 210, 'SUCCESS', { attemptId, executionId }),
     event('RESPONDED', '发送响应', 250, 'SUCCESS', { attemptId, responseBody, description: '服务端已完成本次接口响应发送。' }),
   ]), attemptId, instanceId: `${requestId}-handling-${attemptId}` }
   const received = stage('ADAPTER_RECEIVED', 0, 20, [
-    event('RECEIVED', '接收请求', 0, 'SUCCESS', { payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) }, description: '适配服务首次收到本次请求 MQ 消息。' }),
-    event('TASK_SAVED', '任务可靠落库', 20, 'SUCCESS', { description: '任务状态 PENDING；接收 Stage 在此完成。' }),
-    event('ACK', '发送请求 ACK', 25, 'SUCCESS', { note: '落库后' }),
+    event('RECEIVED', '接收请求', 0, 'SUCCESS', { payload: { userId, api, feature, ...(sample.fingerPosition ? { fingerPosition: sample.fingerPosition } : {}) } }),
+    event('TASK_SAVED', '任务可靠落库', 20, 'SUCCESS', { description: '任务状态 PENDING' }),
+    event('ACK', '发送请求 ACK', 25, 'SUCCESS'),
   ])
   const calling = { ...stage('ADAPTER_CALLING', 60, 270, [
-    event('CLAIMED', '取得执行槽位并提交 CALLING', 50, 'SUCCESS', { note: '本次调用前' }),
+    event('CLAIMED', '取得执行槽位并提交 CALLING', 50, 'SUCCESS'),
     event('CALL_STARTED', '发起第 1 次 ABIS 调用', 60, 'STARTED', { attemptId, requestBody }),
     event('CALL_RESPONSE', '收到可解析的 ABIS 响应', 270, 'SUCCESS', { attemptId }),
   ]), children: [handling] }
@@ -83,7 +83,7 @@ function buildRequest(sample, index, base) {
     received.events = [received.events[0], received.events[1],
       event('ACK_FAILED', 'ACK 发送异常', 25, 'FAILED', { errorCode: 'ACK_CHANNEL_CLOSED', description: '任务已可靠保存，ACK 失败不撤销接收成功状态。' }),
       event('REDELIVERED', '重复投递', 35, 'SUCCESS', { description: '按 requestId 命中原任务，不创建新请求，不重复执行业务。' }),
-      event('ACK', '发送请求 ACK', 40, 'SUCCESS', { note: '落库后' }),
+      event('ACK', '发送请求 ACK', 40, 'SUCCESS'),
     ]
     record.result = 'running'; waitPublication()
     Object.assign(calling, { status: 'RUNNING', endedAt: null, events: calling.events.slice(0, 2) })
@@ -125,6 +125,8 @@ export function buildLogRecords() {
 export function buildSupplementalLogRecords() {
   const base = Date.now() - 600000
   const missingUser = buildRequest({ userId: null, feature: 'face', api: 'identification', scenario: '缺少用户 ID 的请求' }, 15, base)
+  // 复用此历史样例验收调用方式未记录，仍可按请求 ID 查询并查看详情。
+  delete missingUser.mode
   const retried = buildRequest({ userId: 'U017', feature: 'face', api: 'identification', scenario: '首次连接超时未发送，第二次调用成功' }, 16, base)
   const calling = retried.stages.find(stage => stage.key === 'ADAPTER_CALLING')
   const handling = calling.children[0]

@@ -12,11 +12,11 @@ watch(() => [props.record.requestId, props.responseBody], () => { selectedIndex.
 
 <template>
   <section class="request-image-comparison" aria-label="查重图像比对">
-    <p class="comparison-notice" role="note">图像取自当前入库记录，可能与查重时不同。</p>
-    <div v-if="candidates.length > 1" class="comparison-toolbar"><label id="candidate-choice-label">候选图像</label>
-      <div class="candidate-list" role="group" aria-labelledby="candidate-choice-label">
+    <div class="comparison-toolbar" :class="{ 'has-candidate-controls': candidates.length > 1 }">
+      <div v-if="candidates.length > 1" class="candidate-list" role="group" aria-label="切换候选图像">
         <button v-for="(_, index) in candidates" :key="index" type="button" :aria-pressed="selectedIndex === index" class="candidate-choice" @click="selectedIndex = index">候选 {{ index + 1 }}</button>
       </div>
+      <p class="comparison-source" role="note">图像为当前入库版本</p>
     </div>
     <div class="comparison-grid">
       <CurrentUserImage title="待查图像" :user-id="record.userId" :feature="record.feature" :finger-position="record.fingerPosition" />
@@ -28,8 +28,11 @@ watch(() => [props.record.requestId, props.responseBody], () => { selectedIndex.
 </template>
 
 <style scoped>
-.comparison-notice { margin: 0 0 10px; padding: 8px 10px; background: #f7f9fc; border-radius: 6px; color: var(--abis-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.comparison-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }.comparison-toolbar label { color: var(--el-text-color-regular); font-size: 13px; }.candidate-list { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }.candidate-choice { padding: 7px 10px; border: 1px solid var(--abis-border); border-radius: 6px; background: #fff; color: var(--el-text-color-regular); font-size: 13px; overflow-wrap: anywhere; cursor: pointer; }.candidate-choice[aria-pressed="true"] { color: var(--el-color-primary); border-color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.comparison-toolbar { display: none; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.comparison-toolbar.has-candidate-controls, .request-image-comparison:has(.comparison-image[data-image-state="available"]) .comparison-toolbar { display: flex; }
+.comparison-source { flex: 0 0 auto; max-width: 100%; margin: 0 0 0 auto; color: var(--abis-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.comparison-toolbar:not(.has-candidate-controls) .comparison-source { margin-left: 0; }
+.candidate-list { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; }.candidate-choice { flex-shrink: 0; padding: 7px 10px; border: 1px solid var(--abis-border); border-radius: 6px; background: #fff; color: var(--el-text-color-regular); font-size: 13px; overflow-wrap: anywhere; cursor: pointer; }.candidate-choice[aria-pressed="true"] { color: var(--el-color-primary); border-color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
 .comparison-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .response-origin { color: var(--abis-muted); font-size: 11px; }
 .candidate-result { display: flex; flex-wrap: wrap; align-content: start; gap: 6px 10px; margin: 0; color: var(--el-text-color-regular); font-size: 12px; overflow-wrap: anywhere; }
@@ -39,8 +42,7 @@ watch(() => [props.record.requestId, props.responseBody], () => { selectedIndex.
 <style scoped>
 @media(min-width:601px) {
  .request-image-comparison { display: flex; flex-direction: column; height: 100%; min-height: 0; }
- .comparison-notice,.comparison-toolbar { flex-shrink: 0; }
- .comparison-toolbar { flex-wrap: nowrap; gap: 8px; margin-bottom: 8px; }
+ .comparison-toolbar { flex-shrink: 0; gap: 8px; margin-bottom: 8px; }
  .candidate-list { flex-wrap: nowrap; gap: 6px; }.candidate-choice { width: 76px; flex-shrink: 0; padding: 5px 8px; }
  .comparison-grid { flex: 1; min-height: 0; grid-template-rows: auto auto minmax(50px,1fr) auto; row-gap: 6px; }
  .comparison-grid :deep(.comparison-image) { display: grid; grid-row: span 4; grid-template-rows: subgrid; min-height: 0; }

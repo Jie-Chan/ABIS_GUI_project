@@ -2,7 +2,7 @@
 import { useRecordsTable } from '@/composables/useRecordsTable'
 import QueryPanel from '@/components/QueryPanel.vue'
 import RecordsFooter from '@/components/RecordsFooter.vue'
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import QueryDateRange from '@/components/QueryDateRange.vue'
 import { useAppliedQuery } from '@/composables/useAppliedQuery'
 import { ElMessage } from 'element-plus'
@@ -13,7 +13,7 @@ import {
   EXPORT_STARTED_MESSAGE,
   EXPORT_FAILED_MESSAGE,
 } from '@/utils/csv'
-import { AUDIT_ACTIONS } from '@/constants/audit'
+import { AUDIT_ACTION, AUDIT_ACTIONS } from '@/constants/audit'
 
 const exporting = ref(false)
 const { query, appliedQuery, timeRange, rows, total, loading, error, load, search, resetQuery: resetAppliedQuery, changePage, changePageSize } = useAppliedQuery({
@@ -24,6 +24,15 @@ function resetQuery() { return resetAppliedQuery() }
 
 const detailVisible = ref(false)
 const detail = ref(null)
+const detailShowsChanges = computed(() => [
+  AUDIT_ACTION.UPDATE_THRESHOLD,
+  AUDIT_ACTION.CREATE_ACCOUNT,
+  AUDIT_ACTION.DISABLE_ACCOUNT,
+].includes(detail.value?.action))
+
+function detailValue(value) {
+  return value === undefined || value === null || value === '' ? '—' : value
+}
 
 const resultTagType = { 成功: 'success', 失败: 'danger' }
 
@@ -78,7 +87,7 @@ onMounted(load)
             <el-option label="失败" value="失败" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="audit-actions">
           <el-button type="primary" @click="search">查询</el-button>
           <el-button @click="resetQuery">重置</el-button>
         </el-form-item>
@@ -118,24 +127,31 @@ onMounted(load)
     </el-card>
 
     <el-dialog v-model="detailVisible" title="审计记录详情" width="640px">
-      <el-descriptions v-if="detail" :column="1" border>
-        <el-descriptions-item label="时间">{{ detail.operatedAt }}</el-descriptions-item>
-        <el-descriptions-item label="操作人">{{ detail.operator }}</el-descriptions-item>
-        <el-descriptions-item label="角色">{{ detail.roleLabel }}</el-descriptions-item>
-        <el-descriptions-item label="操作类型">{{ detail.action }}</el-descriptions-item>
-        <el-descriptions-item label="操作对象">{{ detail.target }}</el-descriptions-item>
-        <el-descriptions-item label="变更前值">{{ detail.beforeValue || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="变更后值">{{ detail.afterValue || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="结果">{{ detail.result }}</el-descriptions-item>
-        <el-descriptions-item label="来源 IP">{{ detail.sourceIp }}</el-descriptions-item>
-        <el-descriptions-item label="会话 ID">{{ detail.sessionId }}</el-descriptions-item>
+      <el-descriptions v-if="detail" class="audit-detail" :column="2" border>
+        <el-descriptions-item label="时间" :span="2">{{ detailValue(detail.operatedAt) }}</el-descriptions-item>
+        <el-descriptions-item label="操作人" :span="2">{{ detailValue(detail.operator) }}</el-descriptions-item>
+        <el-descriptions-item label="角色" :span="2">{{ detailValue(detail.roleLabel) }}</el-descriptions-item>
+        <el-descriptions-item label="操作类型" :span="2">{{ detailValue(detail.action) }}</el-descriptions-item>
+        <el-descriptions-item label="操作对象" :span="2">{{ detailValue(detail.target) }}</el-descriptions-item>
+        <el-descriptions-item v-if="detailShowsChanges" label="变更前值">{{ detailValue(detail.beforeValue) }}</el-descriptions-item>
+        <el-descriptions-item v-if="detailShowsChanges" label="变更后值">{{ detailValue(detail.afterValue) }}</el-descriptions-item>
+        <el-descriptions-item label="结果" :span="2">{{ detailValue(detail.result) }}</el-descriptions-item>
+        <el-descriptions-item label="来源 IP" :span="2">{{ detailValue(detail.sourceIp) }}</el-descriptions-item>
+        <el-descriptions-item label="会话 ID" :span="2">{{ detailValue(detail.sessionId) }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.audit-detail :deep(.el-descriptions__content) { overflow-wrap: anywhere; white-space: pre-wrap; }
 .audits-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 0; }.audits-filters > .el-form-item { margin: 0; min-width: 0; }.audits-filters .audit-time { flex: 0 0 auto; width: 464px; }.audits-filters :deep(.el-form-item__label) { padding-right: 8px; white-space: nowrap; }.audits-filters :deep(.el-form-item__content) { min-width: 0; flex: 1; }.audits-filters :deep(.el-date-editor) { width: 100%; min-width: 0; }
-@media(max-width:767px){.audits-filters .audit-time { flex-basis: auto; width: 100%; }.audits-filters > .el-form-item { width: 100%; }.audits-filters :deep(.el-input),.audits-filters :deep(.el-select) { width: 100% !important; }}
+@media (max-width: 767px) {
+  .audits-filters .audit-time { flex-basis: auto; width: 100%; }
+  .audits-filters > .el-form-item { width: 100%; }
+  .audits-filters :deep(.el-form-item__label) { width: 72px; flex: 0 0 72px; }
+  .audits-filters .audit-actions { padding-left: 72px; }
+  .audits-filters :deep(.el-input), .audits-filters :deep(.el-select) { width: 100% !important; }
+}
 
 </style>

@@ -21,13 +21,15 @@ const busy = computed(() => saving.value || confirming.value)
 const loadError = ref('')
 const submitError = ref('')
 const formRef = ref(null)
+const passwordRequirement = '新密码至少 7 位'
+const newPasswordError = ref('')
 const emptyPassword = () => ({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const password = ref(emptyPassword())
 const rules = {
   oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 7, message: '新密码长度必须大于 6 位', trigger: ['blur', 'change'] },
+    { min: 7, message: passwordRequirement, trigger: ['blur', 'change'] },
     { validator: (_, value, done) => done(value && value === password.value.oldPassword ? new Error('新密码不能与原密码相同') : undefined), trigger: 'blur' },
   ],
   confirmPassword: [
@@ -39,6 +41,11 @@ const rules = {
 function clearPassword() {
   password.value = emptyPassword()
   submitError.value = ''
+  newPasswordError.value = ''
+}
+
+function handlePasswordValidation(prop, valid, message) {
+  if (prop === 'newPassword') newPasswordError.value = valid ? '' : message || ''
 }
 
 watch(visible, async open => {
@@ -89,10 +96,6 @@ async function savePassword() {
     <el-tabs v-model="activeTab" class="profile-tabs">
     <el-tab-pane label="基本资料" name="details" :disabled="busy">
     <div v-loading="loading" class="profile-content">
-      <div class="profile-summary">
-        <span class="profile-avatar" aria-hidden="true">{{ roleLabel.slice(0, 1) }}</span>
-        <div><strong>{{ account.username || '-' }}</strong><el-tag size="small" :type="account.role === 'admin' ? 'success' : 'info'">{{ roleLabel }}</el-tag></div>
-      </div>
       <el-descriptions :column="1" class="profile-details">
         <el-descriptions-item label="账户 ID">{{ account.id ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="用户名">{{ account.username || '-' }}</el-descriptions-item>
@@ -108,11 +111,11 @@ async function savePassword() {
     <section class="password-section" aria-label="修改密码">
 
       <el-alert v-if="submitError" :title="submitError" type="error" :closable="false" class="profile-error" />
-      <el-form ref="formRef" :model="password" :rules="rules" label-position="top" :disabled="busy || loading || account.identityPending" @submit.prevent="savePassword">
+      <el-form ref="formRef" :model="password" :rules="rules" label-position="top" :disabled="busy || loading || account.identityPending" @validate="handlePasswordValidation" @submit.prevent="savePassword">
         <el-form-item label="原密码" prop="oldPassword"><el-input v-model="password.oldPassword" type="password" show-password placeholder="请输入原密码" autocomplete="current-password" /></el-form-item>
-        <el-form-item label="新密码" prop="newPassword">
+        <el-form-item label="新密码" prop="newPassword" :show-message="false">
           <el-input v-model="password.newPassword" type="password" show-password placeholder="请输入新密码" autocomplete="new-password" aria-describedby="new-password-requirement" />
-          <p id="new-password-requirement" class="password-requirement">新密码必须大于 6 位（至少 7 位）。</p>
+          <p id="new-password-requirement" class="password-requirement" :class="{ 'is-error': newPasswordError }" :role="newPasswordError ? 'alert' : undefined">{{ newPasswordError || passwordRequirement }}</p>
         </el-form-item>
         <el-form-item label="确认新密码" prop="confirmPassword"><el-input v-model="password.confirmPassword" type="password" show-password placeholder="请再次输入新密码" autocomplete="new-password" @keyup.enter="savePassword" /></el-form-item>
       </el-form>
@@ -128,9 +131,6 @@ async function savePassword() {
 :global(.personal-info-dialog) { display: flex; flex-direction: column; max-height: 88dvh; }
 :global(.personal-info-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; }
 :global(.personal-info-dialog .el-dialog__header), :global(.personal-info-dialog .el-dialog__footer) { flex-shrink: 0; }
-.profile-summary { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
-.profile-avatar { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; background: #eaf0ff; color: #3268e8; font-size: 22px; font-weight: 600; }
-.profile-summary strong { display: block; margin-bottom: 8px; font-size: 17px; overflow-wrap: anywhere; }
 .profile-details :deep(.el-descriptions__label) { display: inline-block; width: 90px; color: #65748c; }
 .profile-details :deep(.el-descriptions__content) { overflow-wrap: anywhere; white-space: pre-wrap; }
 .profile-error { margin-bottom: 16px; }
@@ -141,4 +141,5 @@ async function savePassword() {
 .password-section :deep(.el-input__wrapper) { min-height: 40px; }
 .password-note { margin: 0; color: #718096; font-size: 12px; line-height: 1.7; }
 .password-requirement { margin: 5px 0 0; color: #718096; font-size: 12px; line-height: 1.7; }
+.password-requirement.is-error { color: var(--el-color-danger); }
 </style>
