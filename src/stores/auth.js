@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import api from '@/api'
 import { hasPermission as checkPermission } from '@/constants/roles'
 import { useNavigationStore } from '@/stores/navigation'
+import { useApplicantListStore } from '@/stores/applicants'
 
 const TOKEN_KEY = 'abis_console_token'
 
@@ -25,6 +26,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(username, password) {
     const result = await api.login(username, password)
     useNavigationStore().reset()
+    useApplicantListStore().reset()
     account.value = result.account
     token.value = result.token
     localStorage.setItem(TOKEN_KEY, result.token)
@@ -41,6 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearSession() {
     useNavigationStore().reset()
+    useApplicantListStore().reset()
     account.value = null
     token.value = ''
     localStorage.removeItem(TOKEN_KEY)

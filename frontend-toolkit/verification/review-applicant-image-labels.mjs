@@ -22,19 +22,19 @@ async function namesAreClean(ids){
  assert.doesNotMatch(text,/记录 ID|Mock 样例|演示/)
  assert.equal(await drawer.locator('.record-id').count(),0)
 }
-async function metadata(label){return preview.locator('tr').filter({has:page.locator('.el-descriptions__label').filter({hasText:new RegExp(`^${label}$`)})}).locator('.el-descriptions__content').innerText()}
+async function metadata(label){const cell=preview.locator('tr').filter({has:page.locator('.el-descriptions__label').filter({hasText:new RegExp(`^${label}$`)})}).locator('.el-descriptions__content');return label==='质量分'?cell.locator('.quality-value').innerText():cell.innerText()}
 try{
  await page.goto(`${base}/login`);await page.locator('.login-content input').nth(0).fill('admin');await page.locator('.login-content input').nth(1).fill('admin123');await button('登录').click();await page.waitForURL('**/monitor');await page.getByRole('menuitem',{name:'申请人列表',exact:true}).click();await page.waitForURL('**/applicants');await loaded()
  const people=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;return(await api.listApplicants()).items})
  const ids=people.flatMap(person=>person.records.map(record=>record.recordId))
  await namesAreClean(ids);await open('U301');await namesAreClean(ids)
- assert.equal(await drawer.locator('.finger-slot').count(),10);assert.equal(await drawer.locator('[data-modality="finger"] img').count(),8);assert.equal(await drawer.locator('.finger-placeholder').count(),2);assert.equal(await drawer.locator('[data-modality="finger"] h2').innerText(),'指纹 8 指')
+ assert.equal(await drawer.locator('.finger-slot').count(),10);assert.equal(await drawer.locator('[data-modality="finger"] img').count(),8);assert.equal(await drawer.locator('.finger-placeholder').count(),2);assert.equal(await drawer.locator('[data-modality="finger"] h2').innerText(),'指纹')
  for(const position of ['right_ring','right_little']){const slot=drawer.locator(`[data-finger="${position}"]`);assert.match(await slot.locator('.finger-placeholder').getAttribute('aria-label'),/右手.*未入库/);assert.equal(await slot.locator('button,.quality-score').count(),0)}
  const expected=await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default,latest=(await import('/src/utils/applicant.js')).latestEnrollmentRecord,format=(await import('/src/utils/log.js')).formatLogTime,person=await api.getApplicant('U301');return[latest(person.records.filter(r=>r.feature==='face')),latest(person.records.filter(r=>r.fingerPosition==='left_index'))].map(record=>({...record,displayTime:format(record.updatedAt)}))})
  assert.match(expected[1].recordId,/duplicate/)
  for(const [index,selector]of[[0,'[data-modality="face"] .enrollment-image'],[1,'[data-finger="left_index"] .enrollment-image']]){
-  const image=drawer.locator(selector);assert.equal(await image.locator('img').getAttribute('src'),expected[index].imageUrl);assert.equal(await image.locator('.quality-value').innerText(),String(expected[index].qualityScore));assert.match(await image.getAttribute('aria-label'),/申请人 U301/);if(index===1)assert.match(await image.getAttribute('aria-label'),/指纹.*左手食指/)
-  await image.click();await preview.waitFor();await namesAreClean(ids);assert.equal(await preview.locator('img').getAttribute('src'),expected[index].imageUrl);assert.equal(await metadata('申请人 ID'),'U301');assert.equal(await metadata('质量分'),String(expected[index].qualityScore));assert.equal(await metadata('图像更新时间'),expected[index].displayTime);if(index===1)assert.equal(await metadata('指位'),'左手食指')
+  const image=drawer.locator(selector);assert.equal(await image.locator('img').getAttribute('src'),expected[index].imageUrl);assert.equal(await image.locator('.quality-caption').innerText(),'质量分');assert.equal(await image.locator('.quality-value').innerText(),String(expected[index].qualityScore));assert.match(await image.getAttribute('aria-label'),/申请人 U301/);if(index===1)assert.match(await image.getAttribute('aria-label'),/指纹.*左手食指/)
+  await image.click();await preview.waitFor();assert.equal(await preview.locator('.quality-score').count(),0);assert.equal(await preview.locator('.quality-value').count(),1);await namesAreClean(ids);assert.equal(await preview.locator('img').getAttribute('src'),expected[index].imageUrl);assert.equal(await metadata('申请人 ID'),'U301');assert.equal(await metadata('质量分'),String(expected[index].qualityScore));assert.equal(await metadata('图像更新时间'),expected[index].displayTime);if(index===1)assert.equal(await metadata('指位'),'左手食指')
   assert.equal(await preview.locator('img').evaluate(node=>getComputedStyle(node).objectFit),'contain')
   await page.screenshot({path:`${out}/${index?'finger':'face'}-preview.png`});await preview.getByRole('button',{name:'关闭图像',exact:true}).click();await preview.waitFor({state:'hidden'})
  }
@@ -49,7 +49,7 @@ try{
 
  await page.setViewportSize({width:624,height:850});await open('U302')
  for(const [position,value]of[['right_ring','—'],['right_little','0']]){
-  const image=drawer.locator(`[data-finger="${position}"] .enrollment-image`);assert.equal(await image.locator('.quality-value').innerText(),value);await image.click();await preview.waitFor();assert.equal(await metadata('质量分'),value);await namesAreClean(ids);await preview.getByRole('button',{name:'关闭图像',exact:true}).click();await preview.waitFor({state:'hidden'})
+  const image=drawer.locator(`[data-finger="${position}"] .enrollment-image`);assert.equal(await image.locator('.quality-value').innerText(),value);await image.click();await preview.waitFor();assert.equal(await metadata('质量分'),value);assert.equal(await preview.locator('.quality-score').count(),0);if(value==='—')assert.equal(await preview.locator('.quality-note').innerText(),'未提供');await namesAreClean(ids);await preview.getByRole('button',{name:'关闭图像',exact:true}).click();await preview.waitFor({state:'hidden'})
  }
  await drawer.locator('.el-drawer__body').evaluate(node=>node.scrollTop=node.scrollHeight);assert.ok(await drawer.locator('.el-drawer__body').evaluate(node=>node.scrollWidth<=node.clientWidth+1));await page.screenshot({path:`${out}/mobile-fingers.png`});await close()
  pass('narrow layouts retain scrollable fingers and preserve missing/zero quality values in previews')

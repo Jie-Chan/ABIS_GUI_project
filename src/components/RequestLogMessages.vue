@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { formatLogTime } from '@/utils/log'
 const props = defineProps({ record: Object, visible: Boolean, requestBody: { default: null }, responseBody: { default: null }, selectedResponse: { default: null }, responseCount: Number })
 const expanded = ref(['request','response'])
-watch(() => [props.record.requestId, props.visible], () => { expanded.value = ['request','response'] })
+watch([() => props.record.requestId, () => props.visible], () => { expanded.value = ['request','response'] })
 </script>
 <template>
       <section class="request-response" aria-label="接口报文">

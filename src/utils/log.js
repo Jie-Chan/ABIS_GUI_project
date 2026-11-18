@@ -8,17 +8,25 @@ export function durationMs(start, end) {
 }
 
 export function formatDuration(value) {
-  if (value == null || !Number.isFinite(value) || value < 0) return '无数据'
-  if (value < 1000) return `${value} ms`
-  if (value < 60000) return `${(value / 1000).toFixed(2)} 秒`
+  if (value == null || !Number.isFinite(value) || value < 0) return '—'
+  if (value < 1000) return `${Math.floor(value)} ms`
+  if (value < 60000) return `${Number((value / 1000).toFixed(2))} s`
   const seconds = Math.floor(value / 1000)
-  return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ${seconds % 60} s`
+  return `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min ${seconds % 60} s`
+}
+
+/** 业务执行结束不等于异步响应已交付；已确认闭环但时间缺失时固定显示占位。 */
+export function isRequestComplete(record) {
+  return record.mode === 'sync' ? ['success', 'failure'].includes(record.result) : record.publication === 'published'
 }
 
 export function requestDuration(record, now = Date.now()) {
   const final = record.mode === 'sync' ? record.responseSentAt : record.publishedAt
-  const complete = record.mode === 'sync' ? ['success', 'failure'].includes(record.result) : record.publication === 'published'
-  const value = durationMs(record.receivedAt, complete ? final : new Date(now).toISOString())
+  const complete = isRequestComplete(record)
+  const confirmed = Number.isFinite(record.confirmedDurationMs) && record.confirmedDurationMs >= 0 ? record.confirmedDurationMs : null
+  const elapsed = Number.isFinite(now) && record.receivedAt ? now - Date.parse(record.receivedAt) : null
+  const value = complete ? confirmed ?? durationMs(record.receivedAt, final) : Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null
   return { value, label: complete ? '总耗时' : '已用时', text: formatDuration(value) }
 }
 
@@ -40,7 +48,7 @@ export function requestEntry(record) {
     ? handlingStages(record).flatMap(stage => stage.events || [])
     : record.stages?.find(stage => stage.key === 'ADAPTER_RECEIVED')?.events || []
   const entry = sortEvents(events).find(event => event.kind === 'RECEIVED')
-  return { userId: entry?.payload?.userId ?? null, api: entry?.payload?.api || '', feature: entry?.payload?.feature || record.feature, fingerPosition: entry?.payload?.fingerPosition ?? record.fingerPosition ?? null, receivedAt: entry?.at || null }
+  return { userId: entry?.payload?.userId ?? null, api: entry?.payload?.api || '', feature: entry?.payload?.feature || record.feature, fingerPosition: entry?.payload?.fingerPosition ?? record.fingerPosition ?? null, receivedAt: entry?.at || record.receivedAt || null }
 }
 
 export function currentRequestStage(record) {
@@ -61,12 +69,12 @@ export function currentRequestStage(record) {
 export function projectRequest(record) {
   const entry = requestEntry(record)
   const sent = handlingStages(record).flatMap(stage => stage.events || []).filter(event => event.kind === 'RESPONDED' && event.status === 'SUCCESS')
-  const responseSentAt = sortEvents(sent).at(-1)?.at || null
+  const responseSentAt = Object.hasOwn(record, 'responseSentAt') ? record.responseSentAt : sortEvents(sent).at(-1)?.at || null
   const result = { ...record, ...entry, responseSentAt, apiLabel: LOG_APIS.find(api => api.key === entry.api)?.label || entry.api || '—' }
   result.operationLabel = `${LOG_FEATURE_LABEL[result.feature] || ''}${{ enrollment: '注册', identification: ' 1：N查重', delete: '删除', comparison: '比对', verification: '核验' }[result.api] || result.api}`
   result.currentStage = currentRequestStage(result)
   result.calledAt = formatLogTime(entry.receivedAt).split('.')[0]
-  result.costMs = requestDuration(result).label === '总耗时' ? requestDuration(result).value : null
+  result.costMs = isRequestComplete(result) ? requestDuration(result).value : null
   return result
 }
 

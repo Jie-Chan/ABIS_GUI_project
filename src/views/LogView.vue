@@ -12,8 +12,7 @@ import { ElMessage } from 'element-plus'
 import api from '@/api'
 import UiIcon from '@/components/UiIcon.vue'
 import RequestLogDrawer from '@/components/RequestLogDrawer.vue'
-import LogTimeSort from '@/components/LogTimeSort.vue'
-import { requestDuration, formatLogTime, projectRequest } from '@/utils/log'
+import { requestDuration, formatLogTime, projectRequest, isRequestComplete } from '@/utils/log'
 import {
   downloadBlob,
   timestampedName,
@@ -26,13 +25,21 @@ import {
   LOG_RESULTS,
   LOG_RESULT_LABEL,
   LOG_RESULT_TAG_TYPE,
-  PUBLICATION_LABEL, PUBLICATION_TYPE, STAGE_LABEL,
+  PUBLICATION_LABEL, PUBLICATION_TYPE,
 } from '@/constants/log'
 
 const exporting = ref(false)
-const now = ref(Date.now())
-let clockTimer
-onBeforeUnmount(() => clearInterval(clockTimer))
+const now = ref(NaN)
+const detailVisible = ref(false)
+const detail = ref(null)
+let clockTimer, refreshTimer
+let serverEpoch = NaN, receivedMonotonic = 0, clockRunning = false
+let calibrationPending = false
+
+function tickClock() {
+  if (clockRunning) now.value = serverEpoch + Math.max(0, performance.now() - receivedMonotonic)
+}
+function pauseClock() { tickClock(); clockRunning = false }
 
 const route = useRoute()
 const router = useRouter()
@@ -47,7 +54,7 @@ function routeRequestIds() { const value = route.query.requestIds; return [...ne
 function routeRequestId() { const value = route.query.requestId; return typeof value === 'string' ? value.trim() : '' }
 const emptyQuery = (userId = '') => ({
   page: 1,
-  pageSize: 20,
+  pageSize: navigation.getPageSize('logs'),
   startTime: '',
   endTime: '',
   userId,
@@ -62,30 +69,101 @@ const emptyQuery = (userId = '') => ({
 })
 const hasRouteQuery = () => !!(routeUserId() || routeRequestId() || routeRequestIds().length)
 const restored = !hasRouteQuery() && navigation.logs
-const initialQuery = restored?.query ? { ...restored.query, requestIds: [...restored.query.requestIds] } : emptyQuery(routeUserId())
-const { query, appliedQuery, timeRange, rows, total, loading, error, load, search, resetQuery: resetAppliedQuery, changePage, changePageSize } = useAppliedQuery({
-  initialQuery, fetchPage: params => api.listLogs(params), project: projectRequest, failureMessage: '查询调用日志失败',
+const initialQuery = restored?.query ? { ...restored.query, pageSize: navigation.getPageSize('logs'), requestIds: [...restored.query.requestIds] } : emptyQuery(routeUserId())
+if (restored?.query && restored.query.pageSize !== initialQuery.pageSize) initialQuery.page = 1
+const { query, appliedQuery, timeRange, rows, total, metadata, loading, refreshing, error, load, refresh, search, resetQuery: resetAppliedQuery, changePage, changePageSize } = useAppliedQuery({
+  initialQuery,
+  async fetchPage(params) {
+    // 已打开的详情可在翻页后继续读取，沿用列表接口而不改变当前查询。
+    const requestId = detailVisible.value ? detail.value?.requestId : null
+    const [page, selected] = await Promise.all([
+      api.listLogs(params),
+      requestId ? api.listLogs({ requestId, page: 1, pageSize: 1 }) : null,
+    ])
+    return { ...page, detailRequestId: requestId, detailItem: selected?.items[0] }
+  },
+  project: projectRequest, failureMessage: '查询调用日志失败', refreshFailureMessage: '日志数据暂未更新',
 })
 if (initialQuery.startTime || initialQuery.endTime) timeRange.value = [initialQuery.startTime, initialQuery.endTime]
-const { tableRef, tableMaxHeight } = useRecordsTable(rows)
+const { tableRef, tableMaxHeight } = useRecordsTable(rows, { resetScroll: () => !refreshing.value })
+
+watch(metadata, page => {
+  serverEpoch = Date.parse(page.serverTime)
+  receivedMonotonic = performance.now()
+  now.value = serverEpoch
+  clockRunning = Number.isFinite(serverEpoch) && !document.hidden && navigator.onLine !== false && !calibrationPending
+  if (!Number.isFinite(serverEpoch)) error.value = '日志数据暂未更新：缺少有效的服务端时间'
+  else if (navigator.onLine === false) error.value = '日志数据暂未更新：网络连接已断开'
+  if (detailVisible.value && detail.value) {
+    const selected = page.detailRequestId === detail.value.requestId ? page.detailItem : null
+    const updated = selected || rows.value.find(row => row.requestId === detail.value.requestId)
+    if (updated) detail.value = projectRequest(updated)
+  }
+}, { flush: 'sync' })
+watch(error, value => { if (value) pauseClock() }, { flush: 'sync' })
+watch(rows, async () => {
+  if (!refreshing.value) return
+  const snapshot = appliedQuery.value
+  const body = tableRef.value?.$el.querySelector('.el-table__body-wrapper .el-scrollbar__wrap')
+  const scroll = { x: body?.scrollLeft || 0, y: body?.scrollTop || 0 }
+  await nextTick()
+  if (loading.value || appliedQuery.value !== snapshot) return
+  tableRef.value?.setScrollLeft(scroll.x)
+  tableRef.value?.setScrollTop(scroll.y)
+}, { flush: 'sync' })
+
+const hasUnfinished = computed(() => rows.value.some(row => !isRequestComplete(row)) || (detailVisible.value && detail.value && !isRequestComplete(detail.value)))
+async function refreshLive(force = false) {
+  if (!active || document.hidden || navigator.onLine === false || !appliedQuery.value) return
+  if (loading.value || refreshing.value) {
+    if (force) calibrationPending = true
+    return
+  }
+  if (!force && !calibrationPending && !hasUnfinished.value && !error.value) return
+  calibrationPending = false
+  await refresh()
+}
+function resumeLive() {
+  pauseClock()
+  calibrationPending = true
+  refreshLive(true)
+}
+function visibilityChanged() {
+  if (document.hidden) { pauseClock(); calibrationPending = true }
+  else resumeLive()
+}
+function connectionLost() {
+  pauseClock()
+  calibrationPending = true
+  error.value = '日志数据暂未更新：网络连接已断开'
+}
+watch([loading, refreshing], ([foreground, background]) => {
+  if (!foreground && !background && calibrationPending) refreshLive(true)
+})
 const moreFilters = ref(false)
 const compactMedia = window.matchMedia('(min-width:768px) and (max-width:1199px)')
+const narrowMedia = window.matchMedia('(max-width:767px)')
 const compactDesktop = ref(compactMedia.matches)
-const updateCompact = () => { compactDesktop.value = compactMedia.matches }
+const narrowTable = ref(narrowMedia.matches)
+const updateCompact = () => { compactDesktop.value = compactMedia.matches; narrowTable.value = narrowMedia.matches }
 const additionalCount = computed(() => (compactDesktop.value ? ['api', 'feature'] : ['api', 'feature', 'result', 'publication']).filter(key => appliedQuery.value?.[key]).length)
 async function resetQuery() {
   moreFilters.value = false
-  await resetAppliedQuery({ ...emptyQuery(), userId: '', requestId: '', requestIds: [] })
+  await resetAppliedQuery({ ...emptyQuery(), pageSize: appliedQuery.value?.pageSize || navigation.getPageSize('logs'), userId: '', requestId: '', requestIds: [] })
 }
 async function changeSort({ order }) {
   if (!appliedQuery.value) return
-  const sortOrder = order === 'ascending' ? 'ascending' : 'descending'
-  if (sortOrder === appliedQuery.value.sortOrder) return
+  const sortOrder = order || appliedQuery.value.sortOrder
+  if (sortOrder === appliedQuery.value.sortOrder) {
+    if (!order) tableRef.value?.sort('receivedAt', sortOrder)
+    return
+  }
   await load({ ...appliedQuery.value, sortBy: 'receivedAt', sortOrder, page: 1 })
   tableRef.value?.sort('receivedAt', appliedQuery.value.sortOrder)
 }
 watch(appliedQuery, async snapshot => {
   if (!snapshot) return
+  navigation.setPageSize('logs', snapshot.pageSize)
   query.value.sortBy = snapshot.sortBy
   query.value.sortOrder = snapshot.sortOrder
   await nextTick()
@@ -93,20 +171,19 @@ watch(appliedQuery, async snapshot => {
 })
 const columns = computed(() => {
   const all = {
-    requestId: { label: '请求 ID', minWidth: 160 }, userId: { label: '申请人 ID', minWidth: 96 },
-    api: { label: '接口类型', minWidth: 96 }, receivedAt: { label: '接收时间', minWidth: 180 },
-    sourceIp: { label: '请求来源 IP', minWidth: 112 }, currentStage: { label: '处理环节', minWidth: 125 },
-    result: { label: '执行状态', width: 110 }, publication: { label: '响应发布状态', width: 128 },
-    duration: { label: '请求耗时', width: 90 },
+    requestId: { label: '请求 ID', minWidth: compactDesktop.value ? 160 : 144 }, userId: { label: '申请人 ID', minWidth: 88 },
+    api: { label: '接口类型', minWidth: 140 }, receivedAt: { label: '接收时间', minWidth: 180 },
+    sourceIp: { label: '请求来源 IP', minWidth: 140 },
+    result: { label: '执行状态', width: 106 }, publication: { label: '响应发布状态', width: 124 },
+    duration: { label: '请求耗时', width: 160 },
   }
-  const order = compactDesktop.value
-    ? ['requestId', 'receivedAt', 'result', 'publication', 'userId', 'api', 'sourceIp', 'currentStage', 'duration']
-    : ['requestId', 'userId', 'api', 'receivedAt', 'sourceIp', 'currentStage', 'result', 'publication', 'duration']
+  const order = narrowTable.value
+    ? ['requestId', 'result', 'publication', 'receivedAt', 'userId', 'api', 'sourceIp', 'duration']
+    : compactDesktop.value
+    ? ['requestId', 'receivedAt', 'result', 'publication', 'userId', 'api', 'sourceIp', 'duration']
+    : ['requestId', 'userId', 'api', 'receivedAt', 'sourceIp', 'result', 'publication', 'duration']
   return order.map(key => ({ key, ...all[key] }))
 })
-
-const detailVisible = ref(false)
-const detail = ref(null)
 
 const resultTagType = LOG_RESULT_TAG_TYPE
 const resultLabel = LOG_RESULT_LABEL
@@ -138,7 +215,12 @@ onBeforeRouteLeave(() => {
 })
 onMounted(async () => {
   compactMedia.addEventListener('change', updateCompact)
-  clockTimer = setInterval(() => { now.value = Date.now() }, 1000)
+  narrowMedia.addEventListener('change', updateCompact)
+  document.addEventListener('visibilitychange', visibilityChanged)
+  window.addEventListener('online', resumeLive)
+  window.addEventListener('offline', connectionLost)
+  clockTimer = setInterval(tickClock, 1000)
+  refreshTimer = setInterval(() => refreshLive(), 5000)
   await load()
   await nextTick()
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -147,7 +229,16 @@ onMounted(async () => {
     tableRef.value?.setScrollTop(restored.scroll.y)
   }
 })
-onBeforeUnmount(() => { active = false; compactMedia.removeEventListener('change', updateCompact) })
+onBeforeUnmount(() => {
+  active = false
+  clearInterval(clockTimer)
+  clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', visibilityChanged)
+  window.removeEventListener('online', resumeLive)
+  window.removeEventListener('offline', connectionLost)
+  compactMedia.removeEventListener('change', updateCompact)
+  narrowMedia.removeEventListener('change', updateCompact)
+})
 watch(() => [route.query.userId, route.query.requestId, route.query.requestIds], () => {
   query.value = emptyQuery(routeUserId())
   timeRange.value = []
@@ -214,20 +305,16 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
       </el-form>
       </QueryPanel>
 
-      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" row-key="id" class="request-table" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border style="width: 100%" :default-sort="{ prop: 'receivedAt', order: initialQuery.sortOrder }" :header-cell-class-name="({ column }) => column.property === 'receivedAt' ? 'noclick' : ''" @sort-change="changeSort" @row-click="openDetail">
+      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" row-key="id" class="request-table" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border scrollbar-always-on :scrollbar-tabindex="0" style="width: 100%" :default-sort="{ prop: 'receivedAt', order: initialQuery.sortOrder }" @sort-change="changeSort" @row-click="openDetail">
         <el-table-column v-for="column in columns" :key="column.key" :prop="column.key" :label="column.label" :min-width="column.minWidth" :width="column.width" :sortable="column.key === 'receivedAt' ? 'custom' : false" :sort-orders="['descending', 'ascending']">
-          <template #header>
-            <LogTimeSort v-if="column.key === 'receivedAt'" :order="appliedQuery?.sortOrder || initialQuery.sortOrder" @change="order => changeSort({ order })" />
-            <template v-else>{{ column.label }}</template>
-          </template>
           <template #default="{ row }">
-            <span v-if="['requestId', 'userId', 'sourceIp'].includes(column.key)" class="log-id">{{ row[column.key] || '—' }}</span>
-            <template v-else-if="column.key === 'api'">{{ row.operationLabel }}</template>
+            <span v-if="['requestId', 'userId'].includes(column.key)" class="log-id">{{ row[column.key] || '—' }}</span>
+            <el-tooltip v-else-if="column.key === 'sourceIp'" :content="row.sourceIp || '—'" :disabled="!row.sourceIp" :trigger="['hover', 'focus']"><span class="log-id log-source-ip" :tabindex="row.sourceIp ? 0 : undefined">{{ row.sourceIp || '—' }}</span></el-tooltip>
+            <el-tooltip v-else-if="column.key === 'api'" :content="row.operationLabel" :trigger="['hover', 'focus']"><span class="log-operation" tabindex="0">{{ row.operationLabel }}</span></el-tooltip>
             <template v-else-if="column.key === 'receivedAt'">{{ formatLogTime(row.receivedAt) }}</template>
-            <template v-else-if="column.key === 'currentStage'"><span :class="{ 'attention-stage': row.result === 'unknown' || row.result === 'failure' || row.publication === 'pending' }">{{ STAGE_LABEL[row.currentStage] || '—' }}</span><small v-if="row.collectionDelayed" class="collection-hint">日志可能尚未齐全</small></template>
             <el-tag v-else-if="column.key === 'result'" :type="resultTagType[row.result]">{{ resultLabel[row.result] }}</el-tag>
             <template v-else-if="column.key === 'publication'"><el-tag v-if="row.mode !== 'sync'" :type="PUBLICATION_TYPE[row.publication] || 'info'">{{ PUBLICATION_LABEL[row.publication] || '—' }}</el-tag><span v-else>—</span></template>
-            <template v-else-if="column.key === 'duration'"><small v-if="requestDuration(row, now).label === '已用时'" class="duration-label">已用时</small><span class="duration-value">{{ requestDuration(row, now).text }}</span></template>
+            <template v-else-if="column.key === 'duration'"><span class="duration-value">{{ requestDuration(row, now).text }}</span></template>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="64" fixed="right">
@@ -241,7 +328,6 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
         :current-page="appliedQuery?.page || 1"
         :page-size="appliedQuery?.pageSize || 20"
         :total="total"
-        :page-sizes="[5, 10, 20, 50, 100]"
         @update:current-page="changePage"
         @update:page-size="changePageSize"
       >
@@ -257,12 +343,9 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
 <style scoped>
 .return-applicant { margin-bottom: 8px; }
 .log-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
-.duration-label { display: block; color: var(--abis-muted); font-size: 11px; line-height: 1.6; }
-.duration-value { white-space: nowrap; }
+.log-source-ip,.log-operation { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duration-value { display: block; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .request-table :deep(.el-table__row) { cursor: pointer; }
-.attention-stage, .collection-hint { color: var(--el-color-warning); }
-.collection-hint { display: block; font-size: 11px; }
-.request-table :deep(.caret-wrapper) { display: none; }
 .logs-filters { display: grid; grid-template-columns: minmax(242px,1.1fr) minmax(260px,1.1fr) minmax(200px,.9fr) minmax(220px,1fr) auto; gap: 8px 10px; margin-bottom: 0; }
 .filter-row { display: contents; }
 .more-filters { display: none; }
@@ -276,7 +359,9 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
 .logs-filters :deep(.el-date-editor) { width: 100%; min-width: 0; }
 .logs-filters :deep(.el-select) { width: 100% !important; }
 .log-scope { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 0; font-size: 13px; color: var(--abis-muted); }
-.request-table :deep(.cell) { padding-inline: 10px; overflow-wrap: anywhere; }.request-table :deep(.el-tag) { padding-inline: 6px; font-size: 12px; }
+.request-table :deep(.cell) { padding-inline: 8px; overflow-wrap: anywhere; }.request-table :deep(.el-tag) { padding-inline: 6px; font-size: 12px; }
+.request-table :deep(.el-scrollbar__bar.is-horizontal) { height: 10px; bottom: 0; background: #e7edf5; z-index: 4; }
+.request-table :deep(.el-scrollbar__bar.is-horizontal .el-scrollbar__thumb) { background: #536784; opacity: .8; }
 @media(min-width:768px) and (max-width:1199px) {
  .logs-filters { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
  .filter-row--primary { display: contents; }
@@ -297,7 +382,6 @@ watch(() => [route.query.userId, route.query.requestId, route.query.requestIds],
  .logs-filters .log-actions { grid-column: 2; justify-self: end; grid-row: 4; }
  .filter-row--secondary { display: none; }.filter-row--secondary.is-expanded { display: grid; grid-column: 1 / -1; grid-row: 5; gap: 8px; }
  .logs-filters :deep(.el-form-item__label),.logs-filters .log-user-filter :deep(.el-form-item__label),.logs-filters .log-feature-filter :deep(.el-form-item__label),.logs-filters .log-publication-filter :deep(.el-form-item__label) { width: 90px; }
- .logs-page :deep(.el-table-fixed-column--right) { position: static !important; }.logs-page :deep(.el-table-fixed-column--right::before) { display: none; }
 }
 @media(min-width:768px) and (max-width:959px) {
  .logs-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }

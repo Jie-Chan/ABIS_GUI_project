@@ -61,7 +61,8 @@ async function viewException() {
   await nextTick()
   if (exceptionEvent.value) await processRef.value?.focusEvent(exceptionEvent.value)
 }
-watch([visible, () => props.record], () => { selectedAttemptId.value = responses.value.at(-1)?.attemptId || attempts.value.at(-1) || null; activeTab.value = 'process' })
+watch([visible, () => props.record?.requestId], () => { selectedAttemptId.value = responses.value.at(-1)?.attemptId || attempts.value.at(-1) || null; activeTab.value = 'process' })
+watch(attempts, values => { if (!values.includes(selectedAttemptId.value)) selectedAttemptId.value = responses.value.at(-1)?.attemptId || values.at(-1) || null })
 function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo(0, 0) }
 </script>
 
@@ -72,12 +73,12 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
         <colgroup><col class="label-column"><col><col class="label-column"><col></colgroup>
         <tbody>
           <tr><th>请求 ID</th><td colspan="3"><div class="request-id-actions"><span class="log-id">{{ record.requestId || '—' }}</span><el-button v-if="record.requestId" link type="primary" @click="copyRequestId">复制请求 ID</el-button></div></td></tr>
-          <tr><th>申请人 ID</th><td class="log-id">{{ record.userId || '—' }}</td><th>接口类型</th><td>{{ record.operationLabel }}</td></tr>
-          <tr><th>接收时间</th><td colspan="3">{{ formatLogTime(record.receivedAt) }}</td></tr>
-          <tr><th>调用方式</th><td colspan="3">{{ callMode }}</td></tr>
           <tr><th>执行状态</th><td :colspan="record.mode === 'sync' ? 3 : 1"><el-tag :type="LOG_RESULT_TAG_TYPE[record.result] || 'info'">{{ LOG_RESULT_LABEL[record.result] || '待人工核查' }}</el-tag></td><template v-if="record.mode !== 'sync'"><th>响应发布状态</th><td><el-tag :type="PUBLICATION_TYPE[record.publication] || 'info'">{{ PUBLICATION_LABEL[record.publication] || '—' }}</el-tag></td></template></tr>
-          <tr><th>{{ duration.label === '总耗时' ? '请求总耗时' : '已用时' }}</th><td :colspan="record.mode === 'sync' ? 3 : 1" data-testid="request-duration">{{ duration.text }}</td><template v-if="record.mode !== 'sync'"><th>ABIS 接口处理耗时</th><td><div v-for="handling in handlingDurations" :key="handling.id" data-testid="processing-duration"><small v-if="handlingDurations.length > 1">{{ handling.attemptId }}：</small>{{ formatDuration(durationMs(handling.startedAt, handling.endedAt)) }}</div><span v-if="!handlingDurations.length">无数据</span></td></template></tr>
-          <tr><th>业务结果摘要</th><td colspan="3" data-testid="business-summary">{{ businessSummary }}<span v-if="exceptionEvent" class="summary-exception" :class="{ historical: exceptionInfo.historical }"><code>{{ exceptionEvent.errorCode }}</code><el-button link type="primary" @click="viewException">{{ exceptionInfo.historical ? '历史异常' : '查看事件' }}</el-button></span><p v-if="needsReview" class="review-guide">请结合请求 ID、申请人 ID 和接收时间核对 ABIS 侧处理记录。</p></td></tr>
+          <tr class="business-summary-row"><th>业务结果摘要</th><td colspan="3" data-testid="business-summary">{{ businessSummary }}<span v-if="exceptionEvent" class="summary-exception" :class="{ historical: exceptionInfo.historical }"><code>{{ exceptionEvent.errorCode }}</code><el-button link type="primary" @click="viewException">{{ exceptionInfo.historical ? '历史异常' : '查看事件' }}</el-button></span><p v-if="needsReview" class="review-guide">请结合请求 ID、申请人 ID 和接收时间核对 ABIS 侧处理记录。</p></td></tr>
+          <tr class="request-context"><th>申请人 ID</th><td class="log-id">{{ record.userId || '—' }}</td><th>接口类型</th><td>{{ record.operationLabel }}</td></tr>
+          <tr class="request-context"><th>接收时间</th><td colspan="3">{{ formatLogTime(record.receivedAt) }}</td></tr>
+          <tr class="request-context"><th>调用方式</th><td colspan="3">{{ callMode }}</td></tr>
+          <tr class="request-context"><th>{{ duration.label === '总耗时' ? '请求总耗时' : '已用时' }}</th><td :colspan="record.mode === 'sync' ? 3 : 1" data-testid="request-duration">{{ duration.text }}</td><template v-if="record.mode !== 'sync'"><th>ABIS 接口处理耗时</th><td><div v-for="handling in handlingDurations" :key="handling.id" data-testid="processing-duration"><small v-if="handlingDurations.length > 1">{{ handling.attemptId }}：</small>{{ formatDuration(durationMs(handling.startedAt, handling.endedAt)) }}</div><span v-if="!handlingDurations.length">—</span></td></template></tr>
         </tbody>
       </table>
       <div class="request-detail-region" :class="{ 'is-image-tab': activeTab === 'images' }">
@@ -113,15 +114,17 @@ function resetScroll() { summaryRef.value?.closest('.el-drawer__body')?.scrollTo
 .log-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 .request-summary { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0 0 20px; font-size: 13px; }
 .label-column { width: 146px; }.request-summary th,.request-summary td { padding: 9px 12px; border: 1px solid var(--abis-border); text-align: left; line-height: 1.7; overflow-wrap: anywhere; }.request-summary th { background: #f7f9fc; color: #5b6b82; font-weight: 500; }
+.request-context th,.request-context td { padding-block: 5px; }
+.business-summary-row td { background: #f9fbfd; }
 .request-detail-region { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--abis-border); border-radius: 6px; overflow: hidden; }
 .request-detail-region > .el-alert { margin: 16px; width: calc(100% - 32px); }
 .request-detail-region > .response-choice { padding: 12px 16px 0; }.request-detail-region > .request-process { padding: 16px; }
 .request-tabs :deep(.el-tabs__header) { margin: 0; padding: 0 16px; background: #f7f9fc; }.request-tabs :deep(.el-tabs__content) { min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior-y: contain; }
-.summary-exception { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: 12px; color: var(--el-color-warning); }
+.summary-exception { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; font-size: 13px; color: var(--el-color-warning); }
 .summary-exception.historical { color: var(--abis-muted); }
 .request-id-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
 .request-id-actions .el-button { min-height: 22px; font-size: 12px; }
-.review-guide { margin: 4px 0 0; color: var(--abis-muted); font-size: 12px; }
+.review-guide { margin: 4px 0 0; color: var(--abis-muted); font-size: 13px; }
 .response-choice { margin-bottom: 16px; }.response-choice label { display: block; margin-bottom: 8px; color: var(--abis-muted); font-size: 12px; }.response-selector { width: 100%; }
 .request-tabs { display: flex; flex-direction: column; min-width: 0; min-height: 0; }.request-tabs :deep(.el-tabs__item) { font-size: 14px; }
 @media(max-height:600px) {

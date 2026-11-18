@@ -24,6 +24,9 @@ const go = async (name, path) => { await page.getByRole('menuitem', { name, exac
 const select = async (selector, name) => { await page.locator(selector).click(); await page.getByRole('option', { name, exact: true }).click() }
 const download = async () => { const pending = page.waitForEvent('download'); await button('导出 CSV').click(); const file = await pending; return (await fs.readFile(await file.path(), 'utf8')).replace(/^\uFEFF/, '') }
 const lines = csv => csv.trim().split(/\r?\n/)
+const logTotal = async () => Number((await page.locator('.logs-page .el-pagination__total').innerText()).match(/\d+/)[0])
+const logIds = () => page.locator('.request-table .el-table__row td:first-child .log-id').allTextContents()
+const exportedLogIds = csv => lines(csv).slice(1).map(line => line.match(/^"[^"]*","[^"]*","([^"]+)"/)?.[1])
 const log = page.getByRole('dialog', { name: '请求详情', exact: true })
 const openLog = async id => { await page.locator('.request-table .el-table__row').filter({ hasText: id }).click(); await log.waitFor(); await page.waitForFunction(() => Math.abs(document.querySelector('.request-log-drawer').getBoundingClientRect().right - innerWidth) < 1) }
 const closeLog = async () => { await log.getByRole('button', { name: '关闭', exact: true }).click(); await log.waitFor({ state: 'hidden' }) }
@@ -32,36 +35,97 @@ const acceptance = async () => { await page.evaluate(() => document.querySelecto
 const queryId = async id => { await button('重置').click(); await loaded(); await page.getByPlaceholder('输入完整业务请求 ID').fill(id); await button('查询').click(); await loaded() }
 
 try {
+  await page.clock.setFixedTime(new Date('2026-11-18T09:00:00+08:00'))
   await page.goto(`${base}/login`)
   await page.locator('.login-content input').nth(0).fill('admin'); await page.locator('.login-content input').nth(1).fill('admin123'); await button('登录').click(); await page.waitForURL('**/monitor'); await loaded()
   await go('日志查询', 'logs')
-  assert.equal(await page.locator('.request-table .el-table__row').count(), 15)
   const seed = await page.evaluate(async () => {
     const api = (await import('/src/api/index.js')).default
     const utils = await import('/src/utils/log.js')
-    const normal = await api.listLogs(), missing = await api.listLogs({ requestId: 'REQ-00000016' }), retry = (await api.listLogs({ requestId: 'REQ-00000017' })).items[0]
-    const publications = await Promise.all(['published', 'pending', 'none'].map(publication => api.listLogs({ publication })))
+    const normal = await api.listLogs({ pageSize: 100 }), missing = await api.listLogs({ requestId: 'REQ-00000016' }), retry = (await api.listLogs({ requestId: 'REQ-00000017' })).items[0]
+    const publications = await Promise.all(['published', 'pending', 'none'].map(publication => api.listLogs({ publication, pageSize: 100 })))
     const history = await api.listLogs({ userId: 'U301' })
     const calling = retry.stages.find(stage => stage.key === 'ADAPTER_CALLING')
-    return { total: normal.total, missing, retry, publications, history,
+    return { normal, missing, retry, publications, history,
       bodies: ['attempt-1','attempt-2'].map(attempt => ({ request: utils.requestForAttempt(retry, attempt), response: utils.responseForEvent(retry, utils.handlingStages(retry).flatMap(s => s.events).find(e => e.kind === 'RESPONDED' && e.attemptId === attempt)) })),
       order: utils.stageTimeline(calling).map(entry => ({ type: entry.type, kind: entry.event?.kind, attempt: entry.event?.attemptId || entry.stage?.attemptId })) }
   })
-  assert.equal(seed.total, 15); assert.equal(seed.missing.total, 1); assert.equal(seed.missing.items[0].userId, null)
+  assert.equal(seed.normal.total, 45); assert.equal(seed.missing.total, 1); assert.equal(seed.missing.items[0].userId, null)
   assert.equal(seed.retry.result, 'success'); assert.equal(seed.retry.publication, 'published')
   assert.deepEqual(seed.bodies[0], { request: null, response: null }); assert.equal(seed.bodies[1].request.userId, 'U017'); assert.equal(seed.bodies[1].response.requestId, 'REQ-00000017')
   assert.ok(seed.order.findIndex(e => e.kind === 'CALL_FAILED') < seed.order.findIndex(e => e.kind === 'CALL_STARTED' && e.attempt === 'attempt-2'))
-  assert.ok(seed.history.total > 0); assert.deepEqual(seed.publications.map(p => p.total), [10, 1, 3]); assert.ok(seed.publications.every(p => p.items.every(r => r.mode === 'async')))
-  pass('default 15, exact-ID supplemental/history scope, publication intersections and strict retry request/response pairing')
+  assert.equal(seed.history.total, 7); assert.deepEqual(seed.publications.map(p => p.total), [39, 1, 4]); assert.ok(seed.publications.every(p => p.items.every(r => r.mode !== 'sync')))
+  pass('full-snapshot publication filtering retains supplemental requests and strict retry request/response pairing')
 
+  assert.equal(await logTotal(), 45)
+  assert.match(await page.locator('.logs-page .el-pagination__sizes').innerText(), /20 条\/页/)
+  const fullIds = seed.normal.items.map(row => row.requestId)
+  const allTimes = seed.normal.items.map(row => Date.parse(row.receivedAt))
+  assert.ok(allTimes.every((time, index) => index === 0 || time <= allTimes[index - 1]))
+  const pagedIds = []
+  for (const size of [20, 20, 5]) {
+    const ids = await logIds()
+    assert.equal(ids.length, size)
+    pagedIds.push(...ids)
+    if (size === 20) {
+      await page.locator('.logs-page .el-pagination .btn-next').click()
+      await loaded()
+    }
+  }
+  assert.equal(new Set(pagedIds).size, 45)
+  assert.deepEqual(pagedIds, fullIds)
+  assert.deepEqual(exportedLogIds(await download()), fullIds)
+  await button('重置').click(); await loaded()
+  assert.equal(await logTotal(), 45)
+  assert.deepEqual(await logIds(), fullIds.slice(0, 20))
+  pass('full logs are newest first across 20/20/5 rows, CSV from the last page includes every request, and reset returns to page one')
+
+  await page.setViewportSize({ width: 624, height: 850 })
+  await button('选择时间范围').click()
+  const date = page.getByRole('dialog', { name: '选择时间范围', exact: true })
+  const recaptureDay = date.getByRole('button', { name: '2026-11-12', exact: true })
+  await recaptureDay.click()
+  await recaptureDay.click()
+  await date.getByRole('button', { name: '确定', exact: true }).click()
+  await date.waitFor({ state: 'hidden' })
+  await button('查询').click(); await loaded()
+  const recaptured = seed.normal.items.filter(row => /^RECAP-U30[12]-/.test(row.requestId))
+  assert.equal(await logTotal(), 13)
+  assert.deepEqual(await logIds(), recaptured.map(row => row.requestId))
+  await page.setViewportSize({ width: 1422, height: 804 })
+  await select('.log-api-filter .el-select', 'Biometric Delete（删除）')
+  await select('.log-feature-filter .el-select', '指纹')
+  await select('.log-result-filter .el-select', '成功')
+  await button('查询').click(); await loaded()
+  assert.equal(await logTotal(), 2)
+  assert.deepEqual(await logIds(), ['RECAP-U302-004', 'RECAP-U301-004'])
+  pass('a date range without IDs finds both recapture histories and intersects with interface, modality and result filters')
+
+  for (const [label, count] of [['Biometric Enrollment（注册）', 27], ['1：N查重', 12], ['Biometric Delete（删除）', 6]]) {
+    await button('重置').click(); await loaded()
+    await select('.log-api-filter .el-select', label)
+    await button('查询').click(); await loaded()
+    assert.equal(await logTotal(), count)
+  }
+  await button('重置').click(); await loaded()
+  const applicantId = page.getByPlaceholder('输入完整申请人 ID')
+  for (const [id, count] of [['U001', 4], ['U004', 3], ['U201', 1], ['U301', 7]]) {
+    await applicantId.fill(id)
+    await button('查询').click(); await loaded()
+    assert.equal(await logTotal(), count)
+    assert.deepEqual(await logIds(), seed.normal.items.filter(row => row.userId === id).map(row => row.requestId))
+  }
+  pass('interface totals are 27/12/6 and applicant IDs retrieve the original and historical requests together')
+
+  await button('重置').click(); await loaded()
   await select('.log-api-filter .el-select', '1：N查重'); await button('查询').click(); await loaded()
-  assert.match(await page.locator('.el-pagination__total').innerText(), /9/)
-  await select('.logs-page .el-pagination .el-select', '5条/页'); await loaded()
+  assert.equal(await logTotal(), 12)
+  await select('.logs-page .el-pagination .el-select', '10 条/页'); await loaded()
   await page.getByPlaceholder('输入完整申请人 ID').fill('U001')
-  await page.locator('.el-pagination .btn-next').click(); await loaded(); assert.match(await page.locator('.el-pagination__total').innerText(), /9/)
-  let csv = await download(); assert.equal(lines(csv).length, 10); assert.ok(lines(csv).slice(1).every(line => /^"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}"/.test(line))); assert.doesNotMatch(csv, /ABIS 实际处理耗时/)
+  await page.locator('.logs-page .el-pagination .btn-next').click(); await loaded(); assert.equal(await logTotal(), 12)
+  let csv = await download(); assert.equal(lines(csv).length, 13); assert.deepEqual(exportedLogIds(csv), seed.normal.items.filter(row => row.api === 'identification').map(row => row.requestId)); assert.ok(lines(csv).slice(1).every(line => /^"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}"/.test(line))); assert.doesNotMatch(csv, /ABIS 实际处理耗时/)
   await button('查询').click(); await loaded(); assert.match(await page.locator('.el-pagination__total').innerText(), /2/); csv = await download(); assert.equal(lines(csv).length, 3); assert.ok(lines(csv).slice(1).every(line => line.includes('"U001"')))
-  pass('draft edits and pagination retain applied result; CSV exports all nine rows with milliseconds, then two rows after query')
+  pass('draft edits and pagination retain applied result; CSV exports all twelve rows with milliseconds, then two rows after query')
 
   await page.evaluate(async () => {
     const api = (await import('/src/api/index.js')).default
@@ -143,7 +207,7 @@ try {
   pass('supplemental missing user opens correctly; two attempts show absent first bodies and exact second bodies')
 
   await go('申请人列表', 'applicants')
-  for (const [id, text] of [['U001', '10/10 指'], ['U004', '6/10 指'], ['U301', '8/10 指']]) assert.equal(await page.locator('.applicants-page .el-table__row').filter({ hasText: id }).locator('.finger-count').innerText(), text)
+  for (const [id, count] of [['U001', 10], ['U004', 6], ['U301', 8]]) { const row = page.locator('.applicants-page .el-table__row').filter({ hasText: id }); assert.equal(await row.locator('.finger-count').count(), 0); assert.equal(await row.locator('.list-finger img').count(), count); assert.equal(await row.locator('.finger-placeholder').count(), 10 - count) }
   await page.getByPlaceholder('输入完整申请人 ID').fill('U002'); await button('查询').click(); await loaded(); await page.getByPlaceholder('输入完整申请人 ID').fill('U999')
   await button('按此 ID 查看请求日志').click(); await page.waitForURL('**/logs?userId=U002'); await loaded(); assert.equal(await page.getByPlaceholder('输入完整申请人 ID').inputValue(), 'U002'); assert.ok((await page.locator('.request-table').innerText()).includes('人脸删除'))
   await acceptance()
@@ -154,7 +218,7 @@ try {
     assert.equal(people.includes('U301'), phase !== '双模态删除')
   }
   await page.getByRole('link', { name: '查看申请人列表' }).click(); await page.waitForURL('**/applicants'); await loaded()
-  assert.equal(await page.locator('.applicants-page .el-table__row').filter({ hasText: 'U303' }).locator('.finger-count').innerText(), '指纹未入库')
+  const unrecorded = page.locator('.applicants-page .el-table__row').filter({ hasText: 'U303' }); assert.equal(await unrecorded.locator('.finger-count').count(), 0); assert.equal(await unrecorded.locator('.list-finger img').count(), 0); assert.equal(await unrecorded.locator('.finger-placeholder').count(), 10)
   await page.screenshot({ path: `${out}/recapture-panel.png` }); await acceptance(); await button('恢复默认数据').click(); await loaded()
   pass('distinct finger counts, empty applicant applied-ID navigation and four marked recapture phases through a dedicated acceptance page')
 
@@ -178,8 +242,8 @@ try {
 
   await button('监控').click(); await page.getByRole('menuitem', { name: '服务状态', exact: true }).click(); await loaded()
   for (const [filter, id, host] of [['异常','face-1','algorithm-vm-1'],['未知','minio-1','minio-vm']]) {
-    await button(filter).click(); const instance = page.locator(`[data-instance="${id}"]`); assert.match(await instance.innerText(), /最近探测/)
-    if (id === 'face-1') assert.match(await instance.innerText(), /\d{4}-\d\d-\d\d[\s\S]*健康探测超时/); else assert.match(await instance.innerText(), /最近探测：—\s+原因未记录/)
+    await button(filter).click(); const instance = page.locator(`[data-instance="${id}"]`); assert.doesNotMatch(await instance.innerText(), /最近探测|健康探测超时/)
+    if (id === 'face-1') assert.match(await instance.innerText(), /服务未响应/); else assert.match(await instance.innerText(), /原因未记录/)
     await instance.getByRole('link', { name: '查看主机资源' }).click(); await page.waitForURL(`**/host-resources?hostId=${host}`); await loaded(); assert.equal(await page.locator('.located-host').count(), 1); assert.match(await page.locator('.located-host').innerText(), host === 'minio-vm' ? /MinIO VM/ : /算法 VM 1/)
     await button('监控').click(); await page.getByRole('menuitem', { name: '服务状态', exact: true }).click(); await loaded()
   }

@@ -5,7 +5,7 @@
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   --abis-navy: #17263c;
-  --abis-muted: #718096;
+  --abis-muted: #536784;
   --abis-border: #e5eaf2;
   --el-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
   --el-color-primary: #3268e8;
@@ -15,15 +15,18 @@
   --el-color-primary-light-8: #d6e1fb;
   --el-color-primary-light-9: #ebf0fd;
   --el-color-primary-dark-2: #2853ba;
-  --el-color-success: #159d68;
+  --el-color-success: #0b744e;
   --el-color-success-light-9: #edf9f2;
-  --el-color-danger: #dc4c52;
+  --el-color-danger: #b52a35;
   --el-color-danger-light-9: #fff0f0;
-  --el-color-warning: #bc791d;
+  --el-color-warning: #8b5415;
+  --el-color-warning-light-9: #fdf6ec;
+  --el-color-info: #545b66;
+  --el-color-info-light-9: #f4f4f5;
   --el-text-color-primary: #202d42;
   --el-text-color-regular: #4e5e75;
-  --el-text-color-secondary: #718096;
-  --el-text-color-placeholder: #8c99ac;
+  --el-text-color-secondary: #536784;
+  --el-text-color-placeholder: #66758b;
   --el-border-color: #dce3ed;
   --el-border-color-light: #e5eaf2;
   --el-border-color-lighter: #edf0f6;
@@ -40,9 +43,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid #89aaf5; outline-offs
 h1, h2, h3, p { overflow-wrap: anywhere; }
 .el-button { font-weight: 500; min-height: 36px; padding: 9px 16px; }
 .el-button.is-link { min-height: 28px; padding: 2px 0; }
+.el-button.is-link.el-button--primary:not(.is-disabled):hover,
+.el-button.is-link.el-button--primary:not(.is-disabled):focus-visible { color: var(--el-color-primary-dark-2); }
 .el-button .ui-icon { margin-right: 7px; }
 .el-input__wrapper, .el-select__wrapper { min-height: 36px; }
 .el-tag { border-color: transparent; font-weight: 500; }
+.el-tag.el-tag--primary { --el-tag-text-color: #2357ba; --el-tag-bg-color: #ebf0fd; }
 .el-alert { border-radius: 6px; }
 .el-alert__title { line-height: 1.7; }
 

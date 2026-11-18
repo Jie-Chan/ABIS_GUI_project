@@ -2,9 +2,10 @@
 import { useRecordsTable } from '@/composables/useRecordsTable'
 import QueryPanel from '@/components/QueryPanel.vue'
 import RecordsFooter from '@/components/RecordsFooter.vue'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import QueryDateRange from '@/components/QueryDateRange.vue'
 import { useAppliedQuery } from '@/composables/useAppliedQuery'
+import { useNavigationStore } from '@/stores/navigation'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import {
@@ -16,11 +17,33 @@ import {
 import { AUDIT_ACTION, AUDIT_ACTIONS } from '@/constants/audit'
 
 const exporting = ref(false)
+const navigation = useNavigationStore()
+const initialQuery = { page: 1, pageSize: navigation.getPageSize('audits'), operator: '', action: '', result: '', sortBy: 'operatedAt', sortOrder: 'descending' }
 const { query, appliedQuery, timeRange, rows, total, loading, error, load, search, resetQuery: resetAppliedQuery, changePage, changePageSize } = useAppliedQuery({
-  initialQuery: { page: 1, pageSize: 20, operator: '', action: '', result: '' }, fetchPage: params => api.listAudits(params), failureMessage: '查询审计记录失败',
+  initialQuery, fetchPage: params => api.listAudits(params), failureMessage: '查询审计记录失败',
 })
 const { tableRef, tableMaxHeight } = useRecordsTable(rows)
-function resetQuery() { return resetAppliedQuery() }
+function resetQuery() { return resetAppliedQuery({ ...initialQuery, pageSize: appliedQuery.value?.pageSize || query.value.pageSize }) }
+async function changeSort({ order }) {
+  if (!appliedQuery.value) return
+  const currentOrder = appliedQuery.value.sortOrder
+  const sortOrder = order || currentOrder
+  if (sortOrder === currentOrder) {
+    // 原生箭头重复点击会清空 order；审计时间仅在正序/倒序间切换。
+    if (!order) tableRef.value?.sort('operatedAt', currentOrder)
+    return
+  }
+  await load({ ...appliedQuery.value, sortBy: 'operatedAt', sortOrder, page: 1 })
+  tableRef.value?.sort('operatedAt', appliedQuery.value.sortOrder)
+}
+watch(appliedQuery, async snapshot => {
+  if (!snapshot) return
+  navigation.setPageSize('audits', snapshot.pageSize)
+  query.value.sortBy = snapshot.sortBy
+  query.value.sortOrder = snapshot.sortOrder
+  await nextTick()
+  tableRef.value?.sort('operatedAt', snapshot.sortOrder)
+})
 
 const detailVisible = ref(false)
 const detail = ref(null)
@@ -94,8 +117,8 @@ onMounted(load)
       </el-form>
       </QueryPanel>
 
-      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border style="width: 100%">
-        <el-table-column prop="operatedAt" label="时间" width="180" />
+      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配记录'" border style="width: 100%" :default-sort="{ prop: 'operatedAt', order: initialQuery.sortOrder }" @sort-change="changeSort">
+        <el-table-column prop="operatedAt" label="时间" width="180" sortable="custom" :sort-orders="['descending', 'ascending']" />
         <el-table-column prop="operator" label="操作人" width="130" />
         <el-table-column prop="roleLabel" label="角色" width="100" />
         <el-table-column prop="action" label="操作类型" width="130" />
@@ -115,9 +138,8 @@ onMounted(load)
 
       <RecordsFooter
         :current-page="appliedQuery?.page || 1"
-        :page-size="appliedQuery?.pageSize || 20"
+        :page-size="appliedQuery?.pageSize || initialQuery.pageSize"
         :total="total"
-        :page-sizes="[20, 50, 100]"
         @update:current-page="changePage"
         @update:page-size="changePageSize"
       >

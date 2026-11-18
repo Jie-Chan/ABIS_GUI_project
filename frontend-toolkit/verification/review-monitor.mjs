@@ -10,7 +10,9 @@ page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()
 page.on('request',r=>{if(['xhr','fetch'].includes(r.resourceType())&&new URL(r.url()).origin!==base)backendRequests.push(r.url())})
 const button=name=>page.getByRole('button',{name,exact:true}),loaded=()=>page.waitForFunction(()=>!document.querySelector('.el-loading-mask,.el-button.is-loading'))
 const counts=()=>page.locator('.status-overview dd').allTextContents()
-const refresh=async()=>{await button('立即刷新').click();await loaded()}
+// Boundary fixtures use the existing store request; background polling itself is
+// exercised by review-monitor-live.mjs rather than adding a product refresh UI.
+const refresh=async()=>{await page.evaluate(async()=>{await(await import('/src/stores/monitor.js')).useMonitorStore().refresh()});await loaded()}
 try{
  await page.goto(`${base}/login`);await page.locator('.login-content input').nth(0).fill('admin');await page.locator('.login-content input').nth(1).fill('admin123');await button('登录').click();await page.waitForURL('**/monitor');await loaded()
  assert.deepEqual(await counts(),['10','8','1','1'])
@@ -25,18 +27,19 @@ try{
  pass('all four clickable summary filters show 10/8/1/1 matching rows and hide unmatched groups without changing totals')
  await button('未知').focus();await page.keyboard.press('Enter');assert.equal(await page.locator('.service-card').count(),0);assert.equal(await page.locator('.storage-row').count(),1);await refresh();assert.deepEqual(await page.locator('.instance-id').allTextContents(),['minio-1'])
  await button('全部').click()
- pass('keyboard filtering and manual refresh retain the selected instance filter')
- assert.match(await page.locator('.refresh-area .meta').innerText(),/^状态更新于 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
- assert.doesNotMatch(await page.locator('.monitor-page').innerText(),/每.*秒|自动刷新|倒计时|HTTP|接口调用|刷新频率/)
+ pass('keyboard filtering and incoming state updates retain the selected instance filter')
+ await page.getByText('监控中',{exact:true}).waitFor();assert.equal(await button('立即刷新').count(),0)
+ assert.doesNotMatch(await page.locator('.monitor-page').innerText(),/状态更新于|最近探测|健康探测超时|每.*秒|自动刷新|倒计时|HTTP|接口调用|刷新频率/)
+ assert.equal(await page.locator('[data-instance="face-1"] .probe-reason').innerText(),'服务未响应');assert.equal(await page.locator('[data-instance="minio-1"] .probe-reason').innerText(),'原因未记录')
  const layout=await page.locator('.service-card').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return{x:r.x,y:r.y}}))
  assert.equal(layout[0].y,layout[2].y);assert.ok((await page.locator('.storage-section').boundingBox()).y>layout[0].y)
- pass('desktop layout has three service cards above one storage table, success timestamp only and no frequency/countdown or transport details')
+ pass('desktop layout has three service cards above one storage table, a live monitoring state, concise business causes and no manual refresh/probe details')
  await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;window.originalHealth=api.getHealth})
- const timestamp=await page.locator('.meta').innerText()
+ const timestamp=await page.evaluate(async()=>(await import('/src/stores/monitor.js')).useMonitorStore().fetchedAt)
  await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getHealth=async()=>{throw new Error('模拟读取失败')}});await refresh()
- await page.getByText('读取失败，以下保留上次成功获取的数据。',{exact:true}).waitFor();assert.equal(await page.locator('.meta').innerText(),timestamp);assert.equal(await page.locator('.instance-row').count(),10)
- await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getHealth=window.originalHealth});await refresh();assert.equal(await page.locator('.stale-note').count(),0)
- pass('failed refresh preserves last successful data/time and recovery clears the stale warning')
+ await page.getByText('监控数据暂未更新',{exact:true}).waitFor();assert.equal(await page.evaluate(async()=>(await import('/src/stores/monitor.js')).useMonitorStore().fetchedAt),timestamp);assert.equal(await page.locator('.instance-row').count(),10)
+ await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getHealth=window.originalHealth});await refresh();await page.getByText('监控中',{exact:true}).waitFor();assert.equal(await page.getByText('监控数据暂未更新',{exact:true}).count(),0)
+ pass('interrupted updates preserve last successful data and recovery restores the monitoring indicator')
  await page.evaluate(async()=>{const api=(await import('/src/api/index.js')).default;api.getHealth=async()=>{const r=await window.originalHealth();r.items[0].instances[0].status='unexpected';return r}});await refresh();assert.deepEqual(await counts(),['10','7','1','2'])
  await button('未知').click();assert.deepEqual(await page.locator('.instance-id').allTextContents(),['system-1','minio-1'])
  pass('unrecognized or unavailable state remains counted as unknown rather than being fabricated as normal')
@@ -46,10 +49,10 @@ try{
  for(const width of[1920,1366,1100,1024,768,640,390,320]){
   await page.setViewportSize({width,height:1000});await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`page overflow ${width}`)
-  for(const row of await page.locator('.instance-row').all())assert.ok(await row.evaluate(el=>{const label=el.querySelector('.instance-identity').getBoundingClientRect(),state=el.querySelector('.instance-state').getBoundingClientRect();return label.right<=state.left+1&&el.scrollWidth<=el.clientWidth+1}))
+  for(const row of await page.locator('.instance-row').all())assert.ok(await row.evaluate(el=>{const label=(el.querySelector('.instance-title')||el.querySelector('.instance-identity')).getBoundingClientRect(),state=el.querySelector('.instance-state').getBoundingClientRect();return(label.right<=state.left+1||label.bottom<=state.top+1||state.right<=label.left+1||state.bottom<=label.top+1)&&el.scrollWidth<=el.clientWidth+1}))
   if([1366,390].includes(width))await page.screenshot({path:`${out}/monitor-${width}.png`,fullPage:true})
  }
- pass('instance names and right-aligned states fit 320–1920px with no overlap or clipping')
+ pass('instance names and adjacent state/diagnosis groups fit 320–1920px with no overlap or clipping')
  assert.deepEqual(errors,[]);assert.deepEqual(backendRequests,[]);pass('zero browser errors and zero real-backend requests')
  await fs.writeFile(`${out}/report.json`,JSON.stringify({checks,errors,backendRequests},null,2));console.log(`COMPLETE ${checks.length} checks`)
 }catch(e){await page.screenshot({path:`${out}/failure.png`});console.error(e);process.exitCode=1}finally{await browser.close()}

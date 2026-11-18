@@ -54,7 +54,7 @@ try {
     await button('重置').click(); await loaded()
     if (path === '/logs') {
       await page.locator('.el-pagination__sizes .el-select').click()
-      await page.getByRole('option', { name: '5条/页', exact: true }).click(); await loaded()
+      await page.getByRole('option', { name: '10 条/页', exact: true }).click(); await loaded()
     }
     await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded()
     assert.equal((await page.evaluate(() => window.queryCalls.at(-1))).page, 2)

@@ -7,7 +7,12 @@ const complete = computed(() => props.responseBody?.code === 'SUCCESS' && Array.
 const emptyResult = computed(() => props.record.result === 'failure' ? '本次查重失败' : complete.value ? '本次查重无候选' : ['running', 'waiting'].includes(props.record.result) ? '查重处理中' : '暂无查重结果')
 const candidates = computed(() => complete.value ? props.responseBody.candidates : [])
 const candidate = computed(() => candidates.value[selectedIndex.value] || null)
-watch(() => [props.record.requestId, props.responseBody], () => { selectedIndex.value = 0 })
+watch(() => props.record.requestId, () => { selectedIndex.value = 0 })
+watch(candidates, (values, previous) => {
+  const selected = previous?.[selectedIndex.value]
+  const index = selected ? values.findIndex(value => value.userId === selected.userId && value.fingerPosition === selected.fingerPosition && value.rank === selected.rank) : -1
+  selectedIndex.value = index >= 0 ? index : 0
+})
 </script>
 
 <template>

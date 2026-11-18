@@ -203,6 +203,7 @@ onMounted(load)
 </template>
 
 <style scoped>
+.threshold-page { width: 100%; }
 .threshold-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
 .threshold-page > :deep(.el-card > .el-card__header) { padding: 14px 20px 0; border-bottom: 0; }
 .threshold-page > :deep(.el-card > .el-card__body) { padding: 20px; }
@@ -215,11 +216,11 @@ onMounted(load)
 .threshold-field :deep(.el-input__inner) { font-size: 20px; font-weight: 600; }
 .threshold-field :deep(.el-input__wrapper) { height: 44px; }
 .field-error { color: var(--el-color-danger); font-size: 12px; line-height: 1.7; }
-.bound { color: #718096; font-size: 11px; }
+.bound { color: var(--abis-muted); font-size: 13px; }
 .edit-state { margin-left: 12px; color: var(--el-color-warning); font-size: 13px; }
 .threshold-actions :deep(.el-form-item__content) { gap: 8px 0; }
 .threshold-actions { margin-bottom: 0; }
-.threshold-rule { margin: 12px 0 16px; color: #718096; font-size: 12px; line-height: 1.8; }
+.threshold-rule { margin: 12px 0 16px; color: var(--abis-muted); font-size: 13px; line-height: 1.8; }
 @media (max-width: 900px) { .threshold-fields { grid-template-columns: 1fr; } }
 @media (max-width: 767px) {
   .threshold-page > :deep(.el-card > .el-card__header), .threshold-page > :deep(.el-card > .el-card__body) { padding-inline: 16px; }

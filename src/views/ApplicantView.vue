@@ -11,37 +11,68 @@ import ApplicantListImages from '@/components/ApplicantListImages.vue'
 import ApplicantDetailDrawer from '@/components/ApplicantDetailDrawer.vue'
 import QueryDateRange from '@/components/QueryDateRange.vue'
 import { emptyApplicantQuery, useApplicantListStore } from '@/stores/applicants'
+import { useNavigationStore } from '@/stores/navigation'
 
 const appliedUserId = ref('')
 const router = useRouter()
 const listStore = useApplicantListStore()
-const { query, timeRange } = storeToRefs(listStore)
+const navigation = useNavigationStore()
+const initialPageSize = navigation.getPageSize('applicants')
+const { query, appliedQuery, timeRange } = storeToRefs(listStore)
 const loading = ref(false), error = ref(''), rows = ref([]), total = ref(0)
 const { tableRef, tableMaxHeight } = useRecordsTable(rows)
-let listSequence = 0, detailSequence = 0
+let listSequence = 0, detailSequence = 0, restoringSort = false
 const drawerVisible = ref(false), detailLoading = ref(false), detailError = ref(''), detail = ref(null), selectedUserId = ref('')
 
-async function load() {
+function draftQuery() {
+  return { ...query.value, userId: query.value.userId.trim(), startTime: timeRange.value?.[0] || '', endTime: timeRange.value?.[1] || '' }
+}
+function restoreSort() {
+  restoringSort = true
+  const snapshot = appliedQuery.value
+  if (snapshot?.sortBy && snapshot.sortOrder) tableRef.value?.sort(snapshot.sortBy, snapshot.sortOrder)
+  else tableRef.value?.clearSort()
+  restoringSort = false
+}
+async function load(params = draftQuery()) {
+  const snapshot = { ...params }
   const sequence = ++listSequence
   loading.value = true; error.value = ''
   try {
-    const submittedUserId = query.value.userId.trim()
-    const result = await api.listApplicants({ ...query.value, startTime: timeRange.value?.[0] || '', endTime: timeRange.value?.[1] || '' })
+    const result = await api.listApplicants(snapshot)
     if (sequence !== listSequence) return
-    rows.value = result.items; total.value = result.total; appliedUserId.value = submittedUserId
+    rows.value = result.items; total.value = result.total; appliedUserId.value = snapshot.userId
+    appliedQuery.value = snapshot
+    query.value.page = snapshot.page; query.value.pageSize = snapshot.pageSize
+    query.value.sortBy = snapshot.sortBy; query.value.sortOrder = snapshot.sortOrder
+    navigation.setPageSize('applicants', snapshot.pageSize)
+    return result
   } catch (e) {
     if (sequence !== listSequence) return
-    rows.value = []; total.value = 0; query.value.page = 1; error.value = e.message || '查询申请人失败，请重试'
-  } finally { if (sequence === listSequence) loading.value = false }
+    error.value = e.message || '查询申请人失败，请重试'
+  } finally {
+    if (sequence === listSequence) {
+      loading.value = false
+      await nextTick()
+      if (sequence === listSequence) restoreSort()
+    }
+  }
 }
-function search() { query.value.page = 1; return load() }
-function reset() { query.value = emptyApplicantQuery(); timeRange.value = []; tableRef.value?.clearSort(); return load() }
-function changePage(page) { if (page !== query.value.page) { query.value.page = page; return load() } }
-function changePageSize(size) { query.value.pageSize = size; return search() }
+function search() { return load({ ...draftQuery(), page: 1 }) }
+function reset() {
+  query.value = { ...emptyApplicantQuery(), pageSize: appliedQuery.value?.pageSize || navigation.getPageSize('applicants') }
+  timeRange.value = []
+  return load()
+}
+function changePage(page) { if (appliedQuery.value && page !== appliedQuery.value.page) return load({ ...appliedQuery.value, page }) }
+function changePageSize(pageSize) {
+  return load({ ...(appliedQuery.value || { ...emptyApplicantQuery(), startTime: '', endTime: '' }), page: 1, pageSize })
+}
 function changeSort({ prop, order }) {
+  if (restoringSort || !appliedQuery.value) return
   const sortBy = order ? prop : '', sortOrder = order || ''
-  if (sortBy === query.value.sortBy && sortOrder === query.value.sortOrder) return
-  query.value.sortBy = sortBy; query.value.sortOrder = sortOrder; return search()
+  if (sortBy === appliedQuery.value.sortBy && sortOrder === appliedQuery.value.sortOrder) return
+  return load({ ...appliedQuery.value, page: 1, sortBy, sortOrder })
 }
 async function openDetail(userId, restoring = false) {
   if (!restoring) listStore.detailContext = { userId, tab: 'images', scroll: 0, restore: false }
@@ -68,7 +99,8 @@ onBeforeRouteLeave(() => {
   listStore.scroll = { y: window.scrollY, x: tableRef.value?.$el.querySelector('.el-scrollbar__wrap')?.scrollLeft || 0, bodyY: tableRef.value?.$el.querySelector('.el-scrollbar__wrap')?.scrollTop || 0, restore: true }
 })
 onMounted(async () => {
-  await load(); await nextTick()
+  const restoring = listStore.scroll.restore && appliedQuery.value
+  await load(restoring ? appliedQuery.value : { ...draftQuery(), pageSize: initialPageSize }); await nextTick()
   if (listStore.scroll.restore) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     window.scrollTo(0, listStore.scroll.y)
@@ -92,7 +124,7 @@ onBeforeUnmount(() => { ++listSequence; ++detailSequence })
         <el-form-item class="query-actions"><el-button type="primary" @click="search"><UiIcon name="search" :size="16" />查询</el-button><el-button @click="reset">重置</el-button></el-form-item>
       </el-form>
       </QueryPanel>
-      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" row-key="userId" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配的申请人'" :default-sort="{ prop: query.sortBy, order: query.sortOrder }" border @sort-change="changeSort">
+      <el-table ref="tableRef" :max-height="tableMaxHeight" :data="rows" row-key="userId" v-loading="loading" :empty-text="error ? '查询失败，请重试' : '暂无匹配的申请人'" :default-sort="{ prop: appliedQuery?.sortBy || query.sortBy, order: appliedQuery?.sortOrder || query.sortOrder }" border @sort-change="changeSort">
         <template #empty><div class="applicant-empty"><span>{{ error ? '查询失败，请重试' : '暂无匹配的申请人' }}</span><el-button v-if="!error && appliedUserId" link type="primary" @click="viewEmptyLogs">按此 ID 查看请求日志</el-button></div></template>
         <el-table-column prop="userId" label="申请人 ID" min-width="105"><template #default="{ row }"><span class="applicant-id">{{ row.userId }}</span></template></el-table-column>
         <el-table-column label="人脸" width="80"><template #default="{ row }"><ApplicantListImages :records="row.records" feature="face" /></template></el-table-column>
@@ -101,7 +133,7 @@ onBeforeUnmount(() => { ++listSequence; ++detailSequence })
         <el-table-column prop="updatedAt" label="更新时间" min-width="190" sortable="custom"><template #default="{ row }">{{ row.updatedAt || '—' }}</template></el-table-column>
         <el-table-column label="操作" width="120" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="openDetail(row.userId)">查看详情</el-button></template></el-table-column>
       </el-table>
-      <RecordsFooter :current-page="query.page" :page-size="query.pageSize" :total="total" :page-sizes="[2, 5, 20, 50]" @update:current-page="changePage" @update:page-size="changePageSize" />
+      <RecordsFooter :current-page="appliedQuery?.page || 1" :page-size="appliedQuery?.pageSize || initialPageSize" :total="total" @update:current-page="changePage" @update:page-size="changePageSize" />
     </el-card>
     <ApplicantDetailDrawer v-model="drawerVisible" :detail="detail" :loading="detailLoading" :error="detailError" @closed="closeDetail" @retry="openDetail(selectedUserId)" @change-log="viewChangeLogs" @opened="restoreDetailPosition" v-model:active-tab="listStore.detailContext.tab" />
   </div>
@@ -113,5 +145,6 @@ onBeforeUnmount(() => { ++listSequence; ++detailSequence })
 .applicant-filters :deep(.el-select),.applicant-filters :deep(.el-date-editor) { width: 100%; }
 .applicant-filters > .applicant-id-filter { width: 260px; }
 .applicant-id { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap: anywhere; font-weight: 600; }
+.applicants-page > .el-card :deep(.el-card__body > .el-table td.el-table__cell) { padding-block: 8px; }
 @media(max-width:767px){.applicant-filters > .applicant-id-filter,.applicant-filters > .enrollment-range { width: 100%; }.applicant-filters > .el-form-item { width: 100%; }.applicants-page :deep(.el-table-fixed-column--right) { position: static !important; }.applicants-page :deep(.el-table-fixed-column--right::before) { display: none; }}
 </style>

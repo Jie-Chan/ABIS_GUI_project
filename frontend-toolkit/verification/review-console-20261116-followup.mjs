@@ -121,7 +121,7 @@ try {
   assert.equal((await summaryValue('调用方式').innerText()).trim(), '未记录')
   assert.equal((await summaryValue('申请人 ID').innerText()).trim(), '—')
   await shot('historical-mode-unrecorded-sample'); await closeDrawer(log)
-  await button('重置').click(); await loaded(); assert.equal(await total(), 15)
+  await button('重置').click(); await loaded(); assert.equal(await total(), 45)
 
   // Missing source data must remain unknown even when a record otherwise resembles an async sample.
   await page.evaluate(async () => {

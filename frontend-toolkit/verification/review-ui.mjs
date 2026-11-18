@@ -23,7 +23,7 @@ const noOverflow=async name=>{
  pass(`${name}: no page overflow`)
 }
 const snap=async name=>{await page.waitForFunction(()=>!document.querySelector('.el-message'));await page.screenshot({path:`${out}/${name}.png`,fullPage:true})}
-const settings=page.getByRole('button',{name:'设置',exact:true})
+const settings=page.locator('.settings-nav-trigger')
 const nav=async(name,path)=>{
  if(path==='monitor'){
    name='服务状态'
@@ -116,7 +116,7 @@ try{
  }
  await page.setViewportSize({width:1600,height:1000})
  await page.locator('.storage-row').filter({hasText:'postgresql-1'}).waitFor()
- await page.getByRole('button',{name:'立即刷新',exact:true}).click();await waitLoaded()
+ await page.evaluate(async()=>{await(await import('/src/stores/monitor.js')).useMonitorStore().refresh()});await waitLoaded()
  await page.locator('.storage-row').filter({hasText:'postgresql-1'}).waitFor()
  pass('monitor instances stay directly visible before and after refresh')
  await snap('02-monitor')

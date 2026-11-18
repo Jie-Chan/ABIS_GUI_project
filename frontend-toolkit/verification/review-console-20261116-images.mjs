@@ -48,13 +48,15 @@ async function visibleBox(locator, top = 0, bottom = page.viewportSize().height)
   assert.ok(box && box.width > 0 && box.height > 0 && box.y >= top - 1 && box.y + box.height <= bottom + 1, `element clipped: ${JSON.stringify(box)}, visible y=${top}..${bottom}`)
   return box
 }
-async function previewMetadata(name) { return preview.locator('.el-descriptions__label').filter({ hasText: new RegExp(`^${name}$`) }).locator('xpath=following-sibling::*[contains(@class,"el-descriptions__content")][1]').innerText() }
+async function previewMetadata(name) { const cell = preview.locator('.el-descriptions__label').filter({ hasText: new RegExp(`^${name}$`) }).locator('xpath=following-sibling::*[contains(@class,"el-descriptions__content")][1]'); return name === '质量分' ? cell.locator('.quality-value').innerText() : cell.innerText() }
 async function checkPreview(image, label) {
   const source = await image.locator('img').getAttribute('src'), quality = (await image.locator('.quality-value').innerText()).trim()
   await image.scrollIntoViewIfNeeded(); await image.click(); await preview.waitFor()
   await page.waitForFunction(() => ![...document.querySelectorAll('.el-overlay')].some(node => /enter-active/.test(node.className))); await paint()
   assert.equal(await preview.locator('img').getAttribute('src'), source)
   assert.equal((await previewMetadata('质量分')).trim(), quality)
+  assert.equal(await preview.locator('.quality-score').count(), 0); assert.equal(await preview.locator('.quality-value').count(), 1)
+  if (quality === '—') assert.equal(await preview.locator('.quality-note').innerText(), '未提供')
   assert.equal(await preview.locator('img').evaluate(node => getComputedStyle(node).objectFit), 'contain')
   const dialog = await preview.locator('.enrollment-preview').boundingBox(), height = page.viewportSize().height
   assert.ok(dialog.y >= 16 - .1 && dialog.y + dialog.height <= height - 16 + .1)
@@ -112,7 +114,7 @@ try {
   for (const [id, count, missing] of [['U301', 8, ['right_ring', 'right_little']], ['U004', 6, ['right_index', 'right_middle', 'right_ring', 'right_little']], ['U006', 0, positions]]) {
     await openPerson(id)
     assert.equal(await person.locator('.finger-slot').count(), 10); assert.equal(await person.locator('[data-modality="finger"] img').count(), count)
-    assert.match(await person.locator('[data-modality="finger"] h2').innerText(), new RegExp(`^指纹\\s*${count} 指$`))
+    assert.equal(await person.locator('[data-modality="finger"] h2').innerText(), '指纹')
     assert.deepEqual(await person.locator('.finger-slot').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-finger'))), positions)
     assert.deepEqual(await person.locator('.finger-slot h4').allTextContents(), [...shortNames, ...shortNames])
     assert.equal(await person.locator('.hand-group').count(), 2)
@@ -147,7 +149,7 @@ try {
   }
   await page.evaluate(async () => (await import('/src/api/index.js')).default.setRecaptureScenario('document-complete'))
   await openPerson('U303'); assert.equal(await person.locator('.finger-slot').count(), 10); assert.equal(await person.locator('[data-modality="finger"] img').count(), 0)
-  assert.match(await person.locator('[data-modality="finger"] h2').innerText(), /^指纹\s*0 指$/)
+  assert.equal(await person.locator('[data-modality="finger"] h2').innerText(), '指纹')
   assert.equal(await person.locator('.finger-placeholder').count(), 10); await shot('applicant-U303-failed-recapture'); await close(person)
   await page.evaluate(async () => (await import('/src/api/index.js')).default.setRecaptureScenario('default'))
   pass('full-height drawers keep two ordered five-position hand rows, 170px equal-height image/missing frames, complete missing-state names, no empty quality/zoom controls, and 24px white-card padding')

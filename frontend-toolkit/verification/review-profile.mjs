@@ -173,7 +173,7 @@ try {
   await page.locator('.el-message-box').getByRole('button', { name: '确定', exact: true }).click()
   await page.waitForURL('**/login')
   await login('ops.zhang', 'ops123')
-  assert.equal(await page.getByRole('button', { name: '设置', exact: true }).count(), 1)
+  assert.equal(await page.locator('.settings-nav-trigger').count(), 1)
   await openProfile()
   assert.match(await dialog.locator('.profile-details').innerText(), /张运维/)
   await fillPassword('ops123', 'ops-preview-next')
@@ -181,7 +181,7 @@ try {
   await page.locator('.el-message-box').getByRole('button', { name: '确定', exact: true }).click()
   await page.waitForURL('**/login')
   await login('ops.zhang', 'ops-preview-next')
-  assert.equal(await page.getByRole('button', { name: '设置', exact: true }).count(), 1)
+  assert.equal(await page.locator('.settings-nav-trigger').count(), 1)
   pass('operator can change own password while retaining threshold access and no account-management access')
 
   await page.reload()

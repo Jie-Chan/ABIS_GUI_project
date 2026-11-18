@@ -121,7 +121,7 @@ export function buildLogRecords() {
   return REQUESTS.map((sample, index) => buildRequest(sample, index, base))
 }
 
-/** 只通过完整 ID 查询的补充验收记录，不改变默认 15 条及入库数据。 */
+/** 默认业务快照中的补充验收请求，不产生入库变更。 */
 export function buildSupplementalLogRecords() {
   const base = Date.now() - 600000
   const missingUser = buildRequest({ userId: null, feature: 'face', api: 'identification', scenario: '缺少申请人 ID 的请求' }, 15, base)

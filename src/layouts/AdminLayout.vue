@@ -80,8 +80,8 @@ async function handleLogout() {
           </el-menu-item>
         </el-menu>
         <el-dropdown v-if="settingsNavItems.length" trigger="click" popper-class="settings-menu" @command="(name) => router.push({ name })">
-          <button class="settings-trigger" :class="{ 'is-active': isSettingsPage }" type="button">
-            <UiIcon name="settings" /><span>设置</span><UiIcon class="settings-chevron" name="arrow" :size="12" />
+          <button class="settings-trigger settings-nav-trigger" :class="{ 'is-active': isSettingsPage }" type="button">
+            <UiIcon name="settings" /><span class="settings-label">设置</span><span class="more-label">更多</span><span v-if="isSettingsPage" class="nav-section-current">· {{ currentTitle }}</span><UiIcon class="settings-chevron" name="arrow" :size="12" />
           </button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -137,6 +137,7 @@ async function handleLogout() {
 .settings-trigger { display: flex; align-items: center; height: 72px; border-top: 0; border-left: 0; border-right: 0; background: transparent; color: #c2cfe2; white-space: nowrap; }
 .settings-trigger:hover { background: #223854; color: #fff; }
 .settings-chevron { transform: rotate(90deg); }
+.more-label,.nav-section-current { display: none; }
 .user { display: flex; align-items: center; justify-self: end; gap: 12px; min-width: 0; max-width: 100%; font-size: 12px; white-space: nowrap; }
 .user :deep(.el-dropdown) { min-width: 0; }
 .account-trigger { display: flex; align-items: center; gap: 10px; min-height: 42px; max-width: min(300px, 100%); padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #d8e2ef; font-size: 12px; }
@@ -186,6 +187,15 @@ async function handleLogout() {
   .page-intro p { font-size: 12px; }
   .page-intro { gap: 12px; margin-bottom: 20px; }
   .page-icon { width: 42px; height: 42px; border-radius: 10px; }
+}
+@media (max-width: 767px) {
+  .primary-navigation { justify-content: flex-start; flex-wrap: wrap; overflow: visible; }
+  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-inline: 8px; gap: 6px; font-size: 14px; }
+  .primary-navigation :deep(.ui-icon) { display: none; }
+  .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }
+  .settings-label { display: none; }
+  .more-label,.nav-section-current { display: inline; }
+  .nav-section-current { font-size: 12px; }
 }
 .workspace-main.records-workspace { --abis-workspace-top: 12px; padding-top: var(--abis-workspace-top); }
 @media (max-width: 767px) {

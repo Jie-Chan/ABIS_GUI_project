@@ -21,13 +21,26 @@ function observe(p) {
 observe(page)
 const pass = label => { checks.push(label); console.log('PASS', label) }
 const button = name => page.getByRole('button', { name, exact: true })
-const loaded = () => page.waitForFunction(() => !document.querySelector('.el-loading-mask,.el-button.is-loading'))
+const loaded = () => page.waitForFunction(() => {
+  const views = { monitor: '.monitor-page', logs: '.logs-page', audits: '.audit-page', applicants: '.applicants-page', threshold: '.threshold-page', accounts: '.account-page', 'host-resources': '.host-resources' }
+  const name = location.pathname.split('/').at(-1), selector = views[name], view = selector && document.querySelector(selector)
+  if (selector && !view) return false
+  // The UI intentionally has no background loading mask. Read the active View's
+  // busy state as well, without a Promise predicate or a fixed-time delay.
+  for (let component = view?.__vueParentComponent; component; component = component.parent) {
+    if (!component.type.__file?.includes('/views/')) continue
+    const state = component.setupState
+    if (name === 'monitor' ? state.store?.loading : state.loading) return false
+    break
+  }
+  return !document.querySelector('.el-loading-mask,.el-button.is-loading')
+})
 const paint = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 const shot = name => page.screenshot({ path: `${out}/${name}.png`, fullPage: true })
 const table = () => page.locator('.request-table')
-const sortToggle = () => table().getByRole('button', { name: /^切换接收时间排序/ })
-const sortArrow = order => table().getByRole('button', { name: order === 'ascending' ? '接收时间正序' : '接收时间倒序', exact: true })
-const ids = () => table().locator('.el-table__row').evaluateAll(nodes => nodes.map(n => n.innerText.match(/REQ-\d+/)?.[0]))
+const sortToggle = () => table().locator('th.is-sortable .caret-wrapper')
+const sortArrow = order => table().locator(`th.is-sortable .sort-caret.${order}`)
+const ids = () => table().locator('.el-table__row td:first-child .log-id').allTextContents()
 const total = async () => Number((await page.locator('.el-pagination__total').innerText()).match(/\d+/)[0])
 const log = page.getByRole('dialog', { name: '请求详情', exact: true })
 const person = page.getByRole('dialog', { name: '申请人详情', exact: true })
@@ -49,28 +62,29 @@ const assertSorted = (rows, order) => { const times = rows.map(r => Date.parse(r
 
 try {
   await page.goto(`${base}/login`); await page.getByLabel('用户名', { exact: true }).fill('admin'); await page.getByLabel('密码', { exact: true }).fill('admin123'); await button('登录').click(); await page.waitForURL('**/monitor'); await loaded(); await go('/logs')
-  assert.equal(await total(), 15); assert.deepEqual(await ids(), Array.from({ length: 15 }, (_, i) => `REQ-${String(15 - i).padStart(8, '0')}`))
+  assert.equal(await total(), 45)
   assert.equal(await table().locator('th.descending').count(), 1)
-  const all = await page.evaluate(async () => { const api = (await import('/src/api/index.js')).default; return { descending: (await api.listLogs({ pageSize: 100 })).items, ascending: (await api.listLogs({ pageSize: 100, sortOrder: 'ascending' })).items, second: (await api.listLogs({ page: 2, pageSize: 5, sortOrder: 'ascending' })).items } })
-  assertSorted(all.descending, 'descending'); assertSorted(all.ascending, 'ascending'); assert.deepEqual(all.second.map(r => r.requestId), all.ascending.slice(5, 10).map(r => r.requestId))
-  pass('default fifteen requests are newest first; adapter sorts all matches before pagination and exposes both directions')
+  const all = await page.evaluate(async () => { const api = (await import('/src/api/index.js')).default; return { descending: (await api.listLogs({ pageSize: 100 })).items, ascending: (await api.listLogs({ pageSize: 100, sortOrder: 'ascending' })).items, second: (await api.listLogs({ page: 2, pageSize: 10, sortOrder: 'ascending' })).items } })
+  assertSorted(all.descending, 'descending'); assertSorted(all.ascending, 'ascending'); assert.deepEqual(all.second.map(r => r.requestId), all.ascending.slice(10, 20).map(r => r.requestId))
+  assert.deepEqual(await ids(), all.descending.slice(0, 20).map(row => row.requestId))
+  pass('the full snapshot sorts before pagination and defaults to newest first')
 
-  await sortToggle().click(); await loaded(); assert.equal(await table().locator('th.ascending').count(), 1); assert.deepEqual(await ids(), all.ascending.map(r => r.requestId))
-  await pageSize('5条/页'); await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded(); assert.deepEqual(await ids(), all.second.map(r => r.requestId))
-  await sortToggle().click(); await loaded(); assert.equal(await page.locator('.el-pager .is-active').innerText(), '1'); assert.deepEqual(await ids(), all.descending.slice(0, 5).map(r => r.requestId))
-  await reset(); assert.equal(await total(), 15); assert.equal(await table().locator('th.descending').count(), 1)
+  await table().locator('th.is-sortable').click({ position: { x: 20, y: 20 } }); await loaded(); assert.equal(await table().locator('th.ascending').count(), 1); assert.deepEqual(await ids(), all.ascending.slice(0, 20).map(r => r.requestId))
+  await pageSize('10 条/页'); await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded(); assert.deepEqual(await ids(), all.second.map(r => r.requestId))
+  await table().locator('th.is-sortable').click({ position: { x: 20, y: 20 } }); await loaded(); assert.equal(await page.locator('.el-pager .is-active').innerText(), '1'); assert.deepEqual(await ids(), all.descending.slice(0, 10).map(r => r.requestId))
+  await reset(); await pageSize('20 条/页'); assert.equal(await total(), 45); assert.equal(await table().locator('th.descending').count(), 1)
   pass('time-header direction changes server ordering, returns to page one, and reset restores default ordering/query')
 
   await page.evaluate(async () => { const api = (await import('/src/api/index.js')).default; window.uxOriginalListLogs = api.listLogs; window.uxSortCalls = []; api.listLogs = async params => { window.uxSortCalls.push({ ...params }); if (window.uxRejectSort) { window.uxRejectSort = false; throw new Error('排序读取失败，请重试') } return window.uxOriginalListLogs(params) } })
   await button('重置').focus(); await page.keyboard.press('Tab'); assert.equal(await sortToggle().evaluate(n => n === document.activeElement), true)
-  await page.keyboard.press('Enter'); await loaded(); assert.equal(await table().locator('th[aria-sort="ascending"]').count(), 1); assert.deepEqual(await ids(), all.ascending.map(r => r.requestId))
-  await page.keyboard.press('Space'); await loaded(); assert.equal(await table().locator('th[aria-sort="descending"]').count(), 1); assert.deepEqual(await ids(), all.descending.map(r => r.requestId))
+  await page.keyboard.press('Enter'); await loaded(); assert.equal(await table().locator('th[aria-sort="ascending"]').count(), 1); assert.deepEqual(await ids(), all.ascending.slice(0, 20).map(r => r.requestId))
+  await page.keyboard.press('Space'); await loaded(); assert.equal(await table().locator('th[aria-sort="descending"]').count(), 1); assert.deepEqual(await ids(), all.descending.slice(0, 20).map(r => r.requestId))
   for (const order of ['ascending', 'descending']) {
-    await sortArrow(order).click(); await loaded(); await paint(); assert.equal(await sortArrow(order).getAttribute('aria-pressed'), 'true'); assert.equal(await table().locator(`th[aria-sort="${order}"]`).count(), 1)
-    const calls = await page.evaluate(() => window.uxSortCalls.length); const before = await ids(); await sortArrow(order).click(); await paint(); assert.equal(await page.evaluate(() => window.uxSortCalls.length), calls); assert.deepEqual(await ids(), before); assert.equal(await sortArrow(order).getAttribute('aria-pressed'), 'true')
+    await sortArrow(order).click(); await loaded(); await paint(); assert.equal(await table().locator('th.is-sortable').getAttribute('aria-sort'), order); assert.equal(await table().locator(`th[aria-sort="${order}"]`).count(), 1)
+    const calls = await page.evaluate(() => window.uxSortCalls.length); const before = await ids(); await sortArrow(order).click(); await paint(); assert.equal(await page.evaluate(() => window.uxSortCalls.length), calls); assert.deepEqual(await ids(), before); assert.equal(await table().locator('th.is-sortable').getAttribute('aria-sort'), order)
   }
-  await pageSize('5条/页'); await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded(); await sortArrow('descending').click(); await paint(); assert.equal(await page.locator('.el-pager .is-active').innerText(), '2'); await sortArrow('ascending').click(); await loaded(); assert.equal(await page.locator('.el-pager .is-active').innerText(), '1')
-  await reset(); const beforeRejectedSort = await ids(); await page.evaluate(() => { window.uxRejectSort = true }); await sortArrow('ascending').click(); await loaded(); await paint(); assert.deepEqual(await ids(), beforeRejectedSort); assert.equal(await sortArrow('descending').getAttribute('aria-pressed'), 'true'); assert.equal(await table().locator('th[aria-sort="descending"]').count(), 1); await page.getByRole('alert').filter({ hasText: '排序读取失败，请重试' }).waitFor(); await reset()
+  await pageSize('10 条/页'); await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded(); await sortArrow('descending').click(); await paint(); assert.equal(await page.locator('.el-pager .is-active').innerText(), '2'); await sortArrow('ascending').click(); await loaded(); assert.equal(await page.locator('.el-pager .is-active').innerText(), '1')
+  await reset(); const beforeRejectedSort = await ids(); await page.evaluate(() => { window.uxRejectSort = true }); await sortArrow('ascending').click(); await loaded(); await paint(); assert.deepEqual(await ids(), beforeRejectedSort); assert.equal(await table().locator('th.is-sortable').getAttribute('aria-sort'), 'descending'); assert.equal(await table().locator('th[aria-sort="descending"]').count(), 1); await page.getByRole('alert').filter({ hasText: '排序读取失败，请重试' }).waitFor(); await reset()
   pass('Tab/Enter/Space toggle the labeled sort control; arrows select explicit directions idempotently, paging changes only with direction, and failed sorting retains actual header state')
 
   for (const [width, height] of [[1440, 900], [1280, 720]]) {
@@ -113,10 +127,10 @@ try {
   await reset(); await applicantInput().fill('U001'); await button('查询').click(); await loaded(); assert.equal(await total(), 4)
   await openLog('REQ-00000002'); assert.equal(await log.locator('.request-summary th').filter({ hasText: /^申请人 ID$/ }).count(), 1); await close(log)
   await go('/audits'); await go('/logs'); assert.equal(await applicantInput().inputValue(), 'U001'); assert.equal(await total(), 4)
-  await reset(); await page.setViewportSize({ width: 1024, height: 640 }); await paint(); await pageSize('5条/页'); await sortToggle().click(); await loaded(); await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded(); await paint()
+  await reset(); await page.setViewportSize({ width: 1024, height: 640 }); await paint(); await pageSize('10 条/页'); await table().locator('th.is-sortable').click({ position: { x: 20, y: 20 } }); await loaded(); await page.locator('.el-pager .number').filter({ hasText: /^2$/ }).click(); await loaded(); await paint()
   const scroll = table().locator('.el-table__body-wrapper .el-scrollbar__wrap'); await scroll.evaluate(n => { n.scrollTop = Math.min(80, n.scrollHeight - n.clientHeight); n.scrollLeft = Math.min(100, n.scrollWidth - n.clientWidth) }); await paint()
   const before = { ids: await ids(), scroll: await scroll.evaluate(n => ({ x: n.scrollLeft, y: n.scrollTop })) }; assert.ok(before.scroll.x > 0 && before.scroll.y > 0)
-  await applicantInput().fill('unsubmitted-draft'); await go('/audits'); await go('/logs'); assert.deepEqual(await ids(), before.ids); assert.equal(await applicantInput().inputValue(), ''); assert.equal(await page.locator('.el-pager .is-active').innerText(), '2'); assert.match(await page.locator('.el-pagination__sizes').innerText(), /5条/); assert.equal(await table().locator('th.ascending').count(), 1)
+  await applicantInput().fill('unsubmitted-draft'); await go('/audits'); await go('/logs'); assert.deepEqual(await ids(), before.ids); assert.equal(await applicantInput().inputValue(), ''); assert.equal(await page.locator('.el-pager .is-active').innerText(), '2'); assert.match(await page.locator('.el-pagination__sizes').innerText(), /10 条/); assert.equal(await table().locator('th.ascending').count(), 1)
   const after = await scroll.evaluate(n => ({ x: n.scrollLeft, y: n.scrollTop })); assert.ok(Math.abs(after.x - before.scroll.x) <= 1 && Math.abs(after.y - before.scroll.y) <= 1); measurements.push({ kind: 'restored log scroll', before, after })
   pass('log navigation restores applied filters, sorting, page size, page and both table scroll positions while discarding unsubmitted drafts')
 
@@ -135,12 +149,12 @@ try {
   await page.setViewportSize({ width: 1280, height: 720 }); await go('/applicants'); await openPerson('U001'); await person.getByRole('tab', { name: '入库变更记录', exact: true }).click(); const change = person.locator('.enrollment-changes .el-table__row').filter({ hasText: '指纹注册' }); await change.getByRole('button', { name: '查看日志', exact: true }).click(); await page.waitForURL('**/logs?**'); await loaded(); assert.equal(await requestInput().inputValue(), 'REQ-00000002'); assert.deepEqual(await ids(), ['REQ-00000002']); await button('返回申请人详情').click(); await page.waitForURL('**/applicants'); await person.waitFor(); await loaded(); assert.equal(await person.getByRole('tab', { name: '入库变更记录', exact: true }).getAttribute('aria-selected'), 'true'); await close(person)
   pass('explicit enrollment links override saved log state and returning restores the same applicant changes tab')
 
-  await openPerson('U001'); assert.match(await person.locator('.face-records .quality-score').innerText(), /质量分\s*91/); assert.equal(await person.locator('[data-modality="finger"] .quality-legend').innerText(), '质量分')
+  await openPerson('U001'); assert.equal(await person.locator('.face-records .quality-score').innerText(), '91'); assert.equal(await person.locator('.quality-legend,.quality-caption').count(), 0); assert.equal(await person.locator('.current-images .quality-note').count(), 0); assert.ok((await person.locator('.quality-score').allTextContents()).every(text => /^(\d+|—)$/.test(text.trim()))); const qualityCenters = await person.locator('.quality-score').evaluateAll(nodes => nodes.map(node => { const bar = node.getBoundingClientRect(), value = node.querySelector('.quality-value').getBoundingClientRect(); return Math.abs(value.x + value.width / 2 - bar.x - bar.width / 2) })); assert.ok(qualityCenters.every(delta => delta <= 1))
   const missing = person.locator('[data-finger="right_ring"] .enrollment-image'); assert.equal(await missing.locator('.quality-value').innerText(), '—'); assert.match(await missing.getAttribute('aria-label'), /质量分未提供/)
   await missing.focus(); const tip = page.getByRole('tooltip').filter({ hasText: /^质量分未提供$/ }); await tip.waitFor(); await missing.hover(); await tip.waitFor(); await shot('quality-missing-tooltip')
-  await missing.click(); await preview.waitFor(); assert.equal(await preview.locator('.image-metadata .el-descriptions__label').filter({ hasText: /^质量分$/ }).locator('xpath=following-sibling::*[1]').innerText(), '—'); await preview.getByRole('button', { name: '关闭图像', exact: true }).click(); await preview.waitFor({ state: 'hidden' })
+  await missing.click(); await preview.waitFor(); assert.equal(await preview.locator('.image-metadata .el-descriptions__label').filter({ hasText: /^质量分$/ }).locator('xpath=following-sibling::*[1]').locator('.quality-value').innerText(), '—'); assert.equal(await preview.locator('.quality-note').innerText(), '未提供'); assert.equal(await preview.locator('.quality-score').count(), 0); await preview.getByRole('button', { name: '关闭图像', exact: true }).click(); await preview.waitFor({ state: 'hidden' })
   const zero = person.locator('[data-finger="right_little"] .enrollment-image'); assert.equal(await zero.locator('.quality-value').innerText(), '0'); assert.doesNotMatch(await zero.getAttribute('aria-label'), /未提供/); await zero.click(); await preview.waitFor(); assert.equal(await preview.locator('.quality-value').innerText(), '0'); await preview.getByRole('button', { name: '关闭图像', exact: true }).click(); await preview.waitFor({ state: 'hidden' }); await close(person)
-  pass('face bars identify quality, fingers share a label, missing score is explained on hover/focus and in accessible names, zero and preview values stay paired')
+  pass('face and finger bars show bare centered values, missing score keeps hover/focus/accessible explanations, and preview metadata stays paired with the image')
 
   await go('/audits'); await select(page.locator('.audits-filters .el-form-item').filter({ has: page.locator('.el-form-item__label').filter({ hasText: /^操作类型$/ }) }), '登录'); await select(page.locator('.audits-filters .el-form-item').filter({ has: page.locator('.el-form-item__label').filter({ hasText: /^结果$/ }) }), '失败'); await button('查询').click(); await loaded()
   const audit = page.getByRole('dialog', { name: '审计记录详情', exact: true })

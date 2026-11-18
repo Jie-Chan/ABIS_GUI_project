@@ -124,12 +124,14 @@ try {
   const durationColumn = headers.findIndex(text => text.trim() === '请求耗时') + 1
   assert.ok(durationColumn > 0)
   const completed = table().locator('.el-table__row').filter({ hasText: 'REQ-00000014' }).locator(`td:nth-child(${durationColumn})`)
-  assert.match((await completed.innerText()).trim(), /^\d+(?:\.\d+)?\s*(?:ms|s|秒|分钟|分|h|小时)$/)
+  const durationPattern = /^(?:\d+ ms|\d+(?:\.\d{1,2})? s|\d+ min \d+ s|\d+ h \d+ min \d+ s)$/
+  assert.match((await completed.innerText()).trim(), durationPattern)
   assert.doesNotMatch(await completed.innerText(), /总耗时|已用时/)
   const ongoing = table().locator('.el-table__row').filter({ hasText: 'REQ-00000009' }).locator(`td:nth-child(${durationColumn})`)
-  assert.match(await ongoing.innerText(), /已用时/); assert.match(await ongoing.innerText(), /\d/)
+  assert.match((await ongoing.innerText()).trim(), durationPattern); assert.doesNotMatch(await ongoing.innerText(), /总耗时|已用时/)
+  assert.equal(await table().locator('.duration-label').count(), 0)
   await shot('request-duration')
-  pass('completed request duration contains only value/unit while an active request retains 已用时')
+  pass('completed and active request durations both contain a single value/unit line using ms/s/min/h')
 
   await openLog('REQ-00000014')
   for (const stageName of ['接收请求', '发布结果']) {

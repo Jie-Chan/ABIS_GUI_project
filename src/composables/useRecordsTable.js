@@ -1,7 +1,7 @@
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 
 /** 表格按视口剩余高度滚动；短列表保持自然高度，表头由 el-table 同步横向位置。 */
-export function useRecordsTable(rows) {
+export function useRecordsTable(rows, { resetScroll = () => true } = {}) {
   const tableRef = ref(null)
   const tableMaxHeight = ref(null)
   let observer, frame
@@ -17,7 +17,7 @@ export function useRecordsTable(rows) {
     tableMaxHeight.value = Math.max(100, Math.floor(innerHeight - table.getBoundingClientRect().top - footerHeight - bottom - 2))
   }
   function schedule() { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) }
-  watch(rows, async () => { await nextTick(); tableRef.value?.setScrollTop(0); schedule() })
+  watch(rows, async () => { const reset = resetScroll(); await nextTick(); if (reset) tableRef.value?.setScrollTop(0); schedule() }, { flush: 'sync' })
   onMounted(() => {
     observer = new ResizeObserver(schedule)
     const card = tableRef.value?.$el.closest('.el-card__body')

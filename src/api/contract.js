@@ -114,6 +114,7 @@
  * @property {string} receivedAt 接收时间，带时区 ISO 格式
  * @property {string|null} responseSentAt 同步服务端完成响应发送时间
  * @property {string|null} publishedAt 异步最终响应通过路由且可靠发布确认的时间
+ * @property {number|null} [confirmedDurationMs] 服务端按请求闭环口径确认的毫秒耗时；仅已完成请求使用，优先于完成时间差，0 为有效值
  * @property {'published'|'pending'|'none'|'sync'} publication 独立于业务执行结果
  * @property {string} currentStage 当前阶段或需要关注的阶段
  * @property {boolean} collectionDelayed 日志采集延迟，不改变已有证据的判定
@@ -121,14 +122,14 @@
  * @property {string} calledAt
  * @property {string} caller
  * @property {string|null} sourceIp 已确认的原始请求发起方 IP；不回退到 MQ、适配服务或重试节点
- * @property {boolean} [historical] Mock 补充历史/重采流程；按用户或请求 ID 查询时可见，默认展示保留 15 条样例
+ * @property {boolean} [historical] Mock 历史、重采或补充验收样例的来源标记，参与默认查询
  * @property {string} api
  * @property {string[]} [relatedRequestIds] 注册请求明确关联的查重请求，不能按相邻时间推测
  * @property {EnrollmentRecord[]} [enrollmentRecords] Mock 本次成功注册的完整有效模态记录
  * @property {string} apiLabel
  * @property {'face'|'finger'} feature
  * @property {'success'|'failure'|'running'|'waiting'|'unknown'} result 执行状态
- * @property {number|null} costMs 已完成的请求总耗时；非最终响应或时间无效时为 null
+ * @property {number|null} costMs 前端摘要派生的已完成请求总耗时；非最终响应或时间无效时为 null，不代替 confirmedDurationMs
  */
 
 /**
@@ -207,6 +208,8 @@
 
 /**
  * @typedef {Object} AuditQueryParams
+ * @property {'operatedAt'} [sortBy='operatedAt'] 全部匹配记录按操作时间排序后分页，CSV 复用同一顺序
+ * @property {'ascending'|'descending'} [sortOrder='descending'] 默认操作时间从新到旧
  * @property {number} [page]
  * @property {number} [pageSize]
  * @property {string} [startTime] 'YYYY-MM-DD HH:mm:ss'
@@ -242,10 +245,10 @@
  * @property {() => Promise<{items: MonitorItem[], fetchedAt: string}>} getHealth
  * @property {() => Promise<{items: Array<MonitorHost & {sample: HostResourceSample|null}>}>} getHostResources 无资源样本不影响服务状态
  * @property {() => Promise<{scenario: RecaptureScenario, userId: string}>} getRecaptureScenario 仅 Mock；HTTP 适配器明确拒绝
- * @property {(scenario: RecaptureScenario) => Promise<{scenario: RecaptureScenario, userId: string}>} setRecaptureScenario 仅 Mock；切换当前会话的共享业务快照，default 恢复 15 条日志
- * @property {(params?: LogQueryParams) => Promise<{total: number, items: LogRecord[]}>} listLogs
+ * @property {(scenario: RecaptureScenario) => Promise<{scenario: RecaptureScenario, userId: string}>} setRecaptureScenario 仅 Mock，切换当前会话的共享业务快照，default 恢复完整的默认快照
+ * @property {(params?: LogQueryParams) => Promise<{total: number, items: LogRecord[], serverTime: string}>} listLogs serverTime 为本次响应计算使用的带时区 ISO 8601 服务端时间；未结束请求以此校准并用 performance.now() 累计
  * @property {(params?: AuditQueryParams) => Promise<{total: number, items: AuditRecord[], demoDateRange?: {start: string, end: string}}>} listAudits demoDateRange 为全部 Mock 样例的日期覆盖范围，独立于当前筛选
- * @property {(params?: LogQueryParams) => Promise<Blob>} exportLogs
+ * @property {(params?: LogQueryParams) => Promise<Blob>} exportLogs 所有未结束请求共用生成导出结果时的同一服务端时点；耗时单位与列表一致
  * @property {(params?: AuditQueryParams) => Promise<Blob>} exportAudits
  */
 

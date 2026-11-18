@@ -43,7 +43,7 @@ try{
  await page.goto(`${base}/login`);await page.locator('.login-content input').nth(0).fill('admin');await page.locator('.login-content input').nth(1).fill('admin123');await button('登录').click();await page.waitForURL('**/monitor');await loaded()
  for(const[width,height]of[[1422,804],[1280,720],[624,850],[390,844],[320,844]]){
   await page.setViewportSize({width,height})
-  for(const[path,count]of[['/applicants',9],['/logs',15],['/audits',64]]){
+  for(const[path,count]of[['/applicants',9],['/logs',45],['/audits',64]]){
    await go(path);await button('重置').click();await loaded();await paint();assert.equal(await total(),count)
    const initial=await geometry(path,width,height),row=table().locator('.el-table__row').first(),rowTop=(await row.boundingBox()).y
    assert.ok(await wrap().evaluate(node=>node.scrollHeight>node.clientHeight+50))
@@ -57,10 +57,9 @@ try{
     await page.getByPlaceholder(placeholder).fill(value);await button('查询').click();await stable('query');assert.ok(await total()>0)
     await button('重置').click();await stable('reset')
     if(path==='/applicants'){await table().locator('th').filter({hasText:'首次注册'}).click();await stable('sort')}
-    if(path!=='/audits'){await select('.records-footer .el-select',path==='/applicants'?'2条/页':'5条/页');await stable('page size')}
-    await footer().locator('.btn-next').click();await stable('next page');assert.equal((await footer().locator('.el-pager .is-active').innerText()).trim(),'2')
-    await footer().locator('.btn-prev').click();await stable('previous page')
-    if(path!=='/audits'){await select('.records-footer .el-select','20条/页');await stable('restore page size')}
+    if(path!=='/audits'){await select('.records-footer .el-select',path==='/applicants'?'10 条/页':'10 条/页');await stable('page size')}
+    if(path==='/applicants'){assert.equal(await footer().locator('.btn-next').isDisabled(),true)}else{await footer().locator('.btn-next').click();await stable('next page');assert.equal((await footer().locator('.el-pager .is-active').innerText()).trim(),'2');await footer().locator('.btn-prev').click();await stable('previous page')}
+    if(path!=='/audits'){await select('.records-footer .el-select','20 条/页');await stable('restore page size')}
    }
   }
  }
@@ -72,14 +71,14 @@ try{
 
  await page.setViewportSize({width:1422,height:804});await go('/applicants');const headY=(await table().locator('.el-table__header-wrapper').boundingBox()).y
  await page.locator('.applicants-page th').filter({hasText:'首次注册'}).click();await loaded();await paint();assert.ok(Math.abs((await table().locator('.el-table__header-wrapper').boundingBox()).y-headY)<1)
- await select('.records-footer .el-select','2条/页');await loaded();await footer().locator('.btn-next').click();await loaded();assert.match(await footer().locator('.el-pager .is-active').innerText(),/2/);assert.equal(await total(),9);await paint();assert.ok(Math.abs((await table().locator('.el-table__header-wrapper').boundingBox()).y-headY)<1)
+ await select('.records-footer .el-select','10 条/页');await loaded();assert.equal(await footer().locator('.btn-next').isDisabled(),true);assert.match(await footer().locator('.el-pager .is-active').innerText(),/1/);assert.equal(await total(),9);await paint();assert.ok(Math.abs((await table().locator('.el-table__header-wrapper').boundingBox()).y-headY)<1)
  await button('重置').click();await loaded();const padding=async()=>page.locator('.records-page .el-card').evaluate(node=>node.getBoundingClientRect().bottom-node.querySelector('.records-footer').getBoundingClientRect().bottom)
  const normalPadding=await padding(),manyHeight=(await page.locator('.records-page .el-card').boundingBox()).height
  for(const[id,count]of[['U001',1],['NOT-FOUND-ID',0]]){await page.getByPlaceholder('输入完整申请人 ID').fill(id);await button('查询').click();await loaded();await paint();assert.equal(await total(),count);assert.ok(Math.abs(await padding()-normalPadding)<1);assert.ok((await page.locator('.records-page .el-card').boundingBox()).height<manyHeight);await geometry('/applicants',1422,804)}
  await button('重置').click();await loaded();pass('sorting, size changes, pagination, zero/few queries and reset preserve header position, unique totals and consistent bottom padding')
 
- await go('/logs');await select('.log-api-filter .el-select','1：N查重');await button('查询').click();await loaded();await select('.records-footer .el-select','5条/页');await loaded();await footer().locator('.btn-next').click();await loaded();assert.equal(await total(),9)
- await page.getByPlaceholder('输入完整申请人 ID').fill('U001');const before=await download();assert.equal(csvCount(before),9);assert.ok(before.trim().split(/\r?\n/).slice(1).every(line=>/^"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}"/.test(line)))
+ await go('/logs');await select('.log-api-filter .el-select','1：N查重');await button('查询').click();await loaded();await select('.records-footer .el-select','10 条/页');await loaded();await footer().locator('.btn-next').click();await loaded();assert.equal(await total(),12)
+ await page.getByPlaceholder('输入完整申请人 ID').fill('U001');const before=await download();assert.equal(csvCount(before),12);assert.ok(before.trim().split(/\r?\n/).slice(1).every(line=>/^"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}"/.test(line)))
  await button('查询').click();await loaded();assert.equal(await total(),2);assert.equal(csvCount(await download()),2);await button('重置').click();await loaded();pass('bottom log export retains applied queries across draft editing and pagination and exports all matching rows with milliseconds')
  await go('/audits');await page.getByPlaceholder('输入完整账号').fill('ops.zhang');await select('.audits-filters .el-select >> nth=0','登录');await button('查询').click();await loaded();const auditTotal=await total();await page.getByPlaceholder('输入完整账号').fill('admin');const previous=await download();assert.equal(csvCount(previous),auditTotal);assert.ok(previous.trim().split(/\r?\n/).slice(1).every(row=>row.includes('"ops.zhang"')));await button('查询').click();await loaded();assert.equal(csvCount(await download()),await total());await button('重置').click();await loaded();assert.equal(csvCount(await download()),64);pass('bottom audit export matches the single applied total, preserves draft behavior and covers every result page')
 

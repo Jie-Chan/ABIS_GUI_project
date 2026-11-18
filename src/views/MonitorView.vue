@@ -22,6 +22,12 @@ const visibleGroups = computed(() => store.items.map(group => ({ ...group,
 })).filter(group => group.instances.length))
 const serviceGroups = computed(() => visibleGroups.value.filter(group => !['postgresql', 'minio'].includes(group.key)))
 const storageRows = computed(() => visibleGroups.value.filter(group => ['postgresql', 'minio'].includes(group.key)).flatMap(group => group.instances.map(instance => ({ ...instance, component: group.name }))))
+const alignedServiceRows = computed(() => statusFilter.value === 'all' && serviceGroups.value.length === 3 && serviceGroups.value.every(group => group.instances.length === 2))
+const monitoringLabel = computed(() => store.error
+  ? store.fetchedAt ? '监控数据暂未更新' : '监控数据暂不可用'
+  : store.fetchedAt ? '监控中' : '正在读取')
+const normalOverview = computed(() => statusFilter.value === 'all' && !!store.fetchedAt && !store.error && instances.value.length > 0
+  && instances.value.every(instance => monitorState(instance.status) === 'normal') && serviceGroups.value.length === 3 && storageRows.value.length > 0)
 const emptyLabel = computed(() => store.error && !store.fetchedAt ? '暂时无法获取服务状态' : instances.value.length ? '暂无匹配的实例或服务' : '暂无服务状态数据')
 let active = true
 onBeforeRouteLeave(() => { navigation.monitor.scroll = window.scrollY })
@@ -35,9 +41,7 @@ onUnmounted(() => { active = false; store.stop() })
 </script>
 
 <template>
-  <div class="monitor-page">
-    <el-alert v-if="store.error" :title="store.error" type="error" :closable="false" show-icon />
-    <p v-if="store.error && store.fetchedAt" class="stale-note">读取失败，以下保留上次成功获取的数据。</p>
+  <div class="monitor-page" :class="{ 'normal-overview': normalOverview }">
     <dl class="status-overview" aria-label="监控状态汇总">
       <div v-for="item in summary" :key="item.key" class="summary-card" :class="{ 'is-selected': statusFilter === item.key, 'has-abnormal': item.key === 'abnormal' && item.count > 0 }">
         <button type="button" class="summary-filter" :aria-label="item.label" :aria-pressed="statusFilter === item.key" @click="statusFilter = item.key" />
@@ -47,17 +51,17 @@ onUnmounted(() => { active = false; store.stop() })
     </dl>
     <div class="monitor-toolbar">
       <h2>实例与服务状态</h2>
-      <div class="refresh-area"><span class="meta">状态更新于 {{ store.fetchedAt || '—' }}</span><el-button :loading="store.loading" @click="store.refresh"><UiIcon name="refresh" :size="16" />立即刷新</el-button></div>
+      <span class="monitoring-state" :class="{ 'is-monitoring': !!store.fetchedAt && !store.error, 'is-interrupted': !!store.error }" role="status" aria-live="polite"><span class="monitoring-dot" aria-hidden="true" />{{ monitoringLabel }}</span>
     </div>
-    <section v-loading="store.loading" class="service-list" aria-label="服务列表" :aria-busy="store.loading">
-      <div v-if="serviceGroups.length" class="service-grid" :class="`service-grid--${serviceGroups.length}`">
+    <section v-loading="store.loading && !store.fetchedAt" class="service-list" aria-label="服务列表" :aria-busy="store.loading && !store.fetchedAt">
+      <div v-if="serviceGroups.length" class="service-grid" :class="[`service-grid--${serviceGroups.length}`, { 'service-grid--aligned': alignedServiceRows }]">
         <article v-for="group in serviceGroups" :key="group.key" class="service-card" :data-service="group.key" :aria-label="group.name">
           <header class="service-heading"><UiIcon name="server" :size="20" /><h3>{{ group.name }}</h3><p v-if="group.host" class="deployment-info">{{ group.host.name }} · {{ group.host.ip }}</p></header>
           <ul class="service-instances">
             <li v-for="instance in group.instances" :key="instance.id" class="instance-row" :data-instance="instance.id">
-              <div class="instance-identity"><span v-if="instance.name" class="instance-name">{{ instance.name }}</span><span class="instance-id">{{ instance.id }}</span><span v-if="instance.host" class="deployment-info">{{ instance.host.name }} · {{ instance.host.ip }}</span></div>
-              <span class="instance-state" :class="MONITOR_STATUS_META[monitorState(instance.status)].tagType">{{ MONITOR_STATUS_META[monitorState(instance.status)].label }}</span>
+              <div class="instance-identity"><div class="instance-title"><span v-if="instance.name" class="instance-name">{{ instance.name }}</span><span class="instance-id">{{ instance.id }}</span></div><el-tag v-if="monitorState(instance.status) === 'normal'" class="instance-state success" type="success">{{ MONITOR_STATUS_META.normal.label }}</el-tag></div>
               <MonitorProbe v-if="monitorState(instance.status) !== 'normal'" :instance="instance" :host="instance.host || group.host" />
+              <span v-if="instance.host" class="deployment-info">{{ instance.host.name }} · {{ instance.host.ip }}</span>
             </li>
           </ul>
         </article>
@@ -70,7 +74,7 @@ onUnmounted(() => { active = false; store.stop() })
           <tbody><tr v-for="instance in storageRows" :key="instance.id" class="instance-row storage-row" :data-instance="instance.id">
             <td>{{ instance.component }}</td><td class="instance-id">{{ instance.id }}</td>
             <td class="instance-identity"><span>{{ instance.host?.name || '—' }}</span><span class="deployment-info">{{ instance.host?.ip || '—' }}</span></td>
-            <td><span class="instance-state" :class="MONITOR_STATUS_META[monitorState(instance.status)].tagType">{{ MONITOR_STATUS_META[monitorState(instance.status)].label }}</span><MonitorProbe v-if="monitorState(instance.status) !== 'normal'" :instance="instance" :host="instance.host" /></td>
+            <td><MonitorProbe v-if="monitorState(instance.status) !== 'normal'" :instance="instance" :host="instance.host" /><el-tag v-else class="instance-state success" type="success">{{ MONITOR_STATUS_META.normal.label }}</el-tag></td>
           </tr></tbody>
         </table>
       </section>
@@ -89,13 +93,16 @@ onUnmounted(() => { active = false; store.stop() })
 .summary-filter:hover { background: #3268e809; }
 .is-selected .summary-filter { box-shadow: inset 0 -3px var(--el-color-primary); }
 .summary-icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; background: #edf2fa; color: #5a7393; }
-.has-abnormal .summary-icon,.has-abnormal dd { color: #d43f47; }
+.has-abnormal .summary-icon,.has-abnormal dd { color: var(--el-color-danger); }
 .status-overview dt { margin-bottom: 4px; color: var(--abis-muted); font-size: 13px; }
 .status-overview dd { margin: 0; font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .monitor-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .monitor-toolbar h2 { margin: 0; font-size: 17px; font-weight: 600; }
-.refresh-area { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.meta { color: var(--abis-muted); font-size: 12px; }
+.monitoring-state { display: inline-flex; align-items: center; gap: 7px; color: var(--abis-muted); font-size: 13px; line-height: 24px; }
+.monitoring-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--el-color-info); }
+.is-monitoring .monitoring-dot { background: var(--el-color-success); }
+.is-interrupted { color: var(--el-color-warning); }
+.is-interrupted .monitoring-dot { background: var(--el-color-warning); }
 .service-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
 .service-grid--1 { grid-template-columns: minmax(0,1fr); }
 .service-grid--2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -105,25 +112,43 @@ onUnmounted(() => { active = false; store.stop() })
 .deployment-info { font-size: 12px; line-height: 1.5; color: var(--abis-muted); overflow-wrap: anywhere; }
 .service-heading h3 { margin: 0; color: var(--el-text-color-primary); font-size: 15px; font-weight: 600; }
 .service-instances { margin: 0; padding: 0 14px; list-style: none; }
-.instance-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; min-height: 60px; box-sizing: border-box; padding: 8px 0; border-bottom: 1px solid var(--abis-border); }
-.instance-row > .probe-info { flex: 0 0 100%; }.storage-table .probe-info { margin-top: 5px; }
+.instance-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-height: 60px; box-sizing: border-box; padding: 12px 0; border-bottom: 1px solid var(--abis-border); }
+.instance-row > .probe-info { width: 100%; }
 .instance-row:last-child { border-bottom: 0; }
-.instance-identity { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.instance-identity { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 4px 10px; }
+.instance-title { display: flex; flex-wrap: wrap; align-items: baseline; min-width: 0; gap: 4px 8px; }
 .instance-name { font-size: 13px; }
-.instance-id { color: #62748d; font-size: 12px; overflow-wrap: anywhere; }
+.instance-id { color: var(--abis-muted); font-size: 12px; overflow-wrap: anywhere; }
 .instance-state { flex-shrink: 0; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.instance-state.success { color: #159d68; }.instance-state.danger { color: #d43f47; }.instance-state.info { color: #7b8798; }
 .storage-section { margin-top: 16px; background: #fff; border: 1px solid var(--abis-border); border-radius: 8px; overflow: hidden; }
 .storage-section h3 { margin: 0; padding: 12px 14px; font-size: 15px; }
 .storage-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
 .component-column { width: 16%; }.instance-column { width: 20%; }.state-column { width: 34%; }
 .storage-table th,.storage-table td { padding: 8px 14px; border-top: 1px solid var(--abis-border); text-align: left; overflow-wrap: anywhere; line-height: 1.5; }
-.storage-table th { font-size: 12px; color: #62748d; font-weight: 500; background: #f7f9fc; }
+.storage-table th { font-size: 12px; color: var(--abis-muted); font-weight: 500; background: #f7f9fc; }
 .storage-table .storage-row { display: table-row; padding: 0; min-height: 0; border: 0; }
 .storage-table .instance-identity { display: table-cell; }
 .storage-table .deployment-info { display: block; margin-top: 3px; }
-.storage-table th:last-child,.storage-table td:last-child { text-align: right; }
-.stale-note { color: #9b691f; font-size: 12px; line-height: 1.7; }
+@media (min-width:1101px) and (min-height:821px) {
+  .normal-overview { display: flex; flex-direction: column; height: calc(100dvh - var(--abis-nav-height,72px) - var(--abis-workspace-top,32px) - var(--monitor-page-bottom,48px)); min-height: 620px; }
+  .normal-overview .status-overview,.normal-overview .monitor-toolbar { flex-shrink: 0; }
+  .normal-overview .service-list { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(220px,.9fr) minmax(280px,1.1fr); gap: 16px; }
+  .normal-overview .service-card { display: flex; flex-direction: column; }
+  .normal-overview .service-heading { flex-shrink: 0; }
+  .normal-overview .service-instances { display: flex; flex-direction: column; flex: 1; }
+  .normal-overview .service-instances .instance-row { flex: 1; justify-content: center; }
+  .normal-overview .storage-section { display: flex; flex-direction: column; min-height: 0; margin-top: 0; }
+  .normal-overview .storage-section h3 { flex-shrink: 0; }
+  .normal-overview .storage-table { flex: 1; height: 100%; }
+  .normal-overview .storage-table thead { height: 36px; }
+}
+@media (max-width:1400px) { .monitor-page { --monitor-page-bottom: 28px; } }
+@container monitor (min-width:661px) {
+  .service-grid--aligned { grid-template-rows: auto repeat(2,minmax(min-content,1fr)); column-gap: 12px; row-gap: 0; }
+  .service-grid--aligned > .service-card { display: grid; grid-row: 1 / span 3; grid-template-rows: subgrid; row-gap: 0; }
+  .service-grid--aligned .service-instances { display: grid; grid-row: 2 / span 2; grid-template-rows: subgrid; row-gap: 0; }
+  .service-grid--aligned .instance-row { justify-content: center; }
+}
 @container monitor (max-width:660px) {
   .summary-card { padding: 0 12px; gap: 8px; }.summary-icon { width: 34px; height: 34px; }
   .service-grid--3 { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -137,7 +162,6 @@ onUnmounted(() => { active = false; store.stop() })
   .service-grid { grid-template-columns: minmax(0,1fr); }
   .service-grid--3 .service-card:last-child .service-instances { display: block; }
   .service-grid--3 .service-card:last-child .instance-row:first-child { border-bottom: 1px solid var(--abis-border); }
-  .refresh-area { gap: 8px; }
   .storage-table th,.storage-table td { padding: 9px 6px; font-size: 12px; }
   .component-column { width: 18%; }.instance-column { width: 21%; }.state-column { width: 35%; }
 }

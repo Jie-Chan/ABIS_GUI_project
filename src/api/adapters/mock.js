@@ -13,7 +13,7 @@ import { buildEnrollmentSubjects } from '@/mock/applicants'
 import { buildBusinessSnapshot } from '@/mock/business'
 import { buildAuditRecords } from '@/mock/audit'
 import { formatDateTime } from '@/utils/datetime'
-import { requestDuration, projectRequest, formatLogTime } from '@/utils/log'
+import { requestDuration, projectRequest, formatLogTime, currentRequestStage, isRequestComplete } from '@/utils/log'
 import { PUBLICATION_LABEL, STAGE_LABEL } from '@/constants/log'
 import { normalizeAuditAction } from '@/constants/audit'
 import { THRESHOLD_KEYS, THRESHOLD_MAX } from '@/constants/threshold'
@@ -36,6 +36,36 @@ let recaptureScenario = 'default'
 const audits = buildAuditRecords()
 
 const delay = (ms = 220) => new Promise((r) => setTimeout(r, ms))
+
+// Mock 的服务端时钟与浏览器墙上时钟隔离，便于验收客户端改时及服务端校准。
+const serverEpoch = Date.now()
+const serverMonotonicStart = performance.now()
+let serverOffsetMs = 0
+let nextLogRead = null
+const timingOverrides = new Map()
+const serverNow = () => serverEpoch + performance.now() - serverMonotonicStart + serverOffsetMs
+
+/** 仅供 Mock 验收调用，不属于正式管理 API，也不修改申请人共享业务数据。 */
+export function configureLogTimingTest({ reset = false, serverOffsetMs: offset, nextRead, records = [] } = {}) {
+  if (reset) {
+    serverOffsetMs = 0
+    nextLogRead = null
+    timingOverrides.clear()
+  }
+  if (offset !== undefined) {
+    if (!Number.isFinite(offset)) throw new Error('Mock 服务端时钟偏移须为有效毫秒数')
+    serverOffsetMs = offset
+  }
+  if (nextRead !== undefined) {
+    if (nextRead !== null && (typeof nextRead !== 'object' || nextRead.delayMs !== undefined && (!Number.isFinite(nextRead.delayMs) || nextRead.delayMs < 0))) throw new Error('Mock 读取延迟须为非负毫秒数')
+    nextLogRead = nextRead && { ...nextRead }
+  }
+  for (const { requestId, patch } of records) {
+    if (!logs.some(record => record.requestId === requestId) || !patch || typeof patch !== 'object') throw new Error('Mock 计时记录不存在或补丁无效')
+    timingOverrides.set(requestId, { ...timingOverrides.get(requestId), ...structuredClone(patch) })
+  }
+  return { serverTime: new Date(serverNow()).toISOString() }
+}
 
 function currentAccount() {
   const account = accounts.find(item => item.id === sessionAccountId && item.enabled)
@@ -277,8 +307,14 @@ export default {
   },
 
   async listLogs(params = {}) {
-    await delay()
-    return paginate(filterLogs(logs, params), params)
+    const read = nextLogRead
+    nextLogRead = null
+    // 生成一次独立的服务端计算快照，网络回传延迟不会被后续状态变更污染。
+    const serverTime = new Date(serverNow()).toISOString()
+    const result = structuredClone({ ...paginate(filterLogs(logs, params), params), serverTime })
+    await delay(read?.delayMs ?? 220)
+    if (read?.fail) throw new Error(typeof read.fail === 'string' ? read.fail : '日志数据暂未更新，请稍后重试')
+    return result
   },
 
   async listAudits(params = {}) {
@@ -291,7 +327,7 @@ export default {
 
   async exportLogs(params = {}) {
     await delay()
-    const now = Date.now()
+    const now = serverNow()
     const rows = filterLogs(logs, params).map(row => {
       const duration = requestDuration(row, now)
       return { ...row, calledAt: formatLogTime(row.receivedAt), userId: row.userId || '—', sourceIp: row.sourceIp || '—', durationLabel: duration.label, durationText: duration.text }
@@ -323,7 +359,7 @@ export default {
 // ——— 内部工具 ———
 
 /**
- * 申请人/业务请求 ID 精确匹配，与时间、接口、模态、结果、耗时组合过滤。
+ * 在当前完整业务快照中组合筛选，申请人和业务请求 ID 精确匹配。
  *
  * ⚠ startTime / endTime 与 r.calledAt 之间是**字符串比较**，三者同为
  *   'YYYY-MM-DD HH:mm:ss' 才成立。传 Date 对象或 'YYYY-MM-DD' 不报错，
@@ -332,8 +368,25 @@ export default {
 function filterLogs(list, { startTime, endTime, userId = '', requestId = '', requestIds = [], api, feature, result, publication, minCost, maxCost, sortOrder = 'descending' } = {}) {
   const applicant = userId.trim()
   const request = requestId.trim()
-  const filtered = list.map(projectRequest).filter((r) => {
-    if (r.historical && !applicant && !request && !requestIds.length) return false
+  const filtered = list.map(record => {
+    const projected = projectRequest(record)
+    const patch = timingOverrides.get(record.requestId)
+    if (!patch) return projected
+    const result = { ...projected, ...structuredClone(patch) }
+    if (Object.hasOwn(patch, 'receivedAt')) {
+      // 详情会再次投影入口证据；验收覆盖同步入口事件，保持列表与详情同源。
+      result.stages = structuredClone(result.stages || [])
+      const stages = result.mode === 'sync' ? result.stages.filter(stage => stage.key === 'ABIS_HANDLING') : result.stages.filter(stage => stage.key === 'ADAPTER_RECEIVED')
+      for (const stage of stages) {
+        const entry = stage.events?.find(event => event.kind === 'RECEIVED')
+        if (entry) entry.at = patch.receivedAt
+      }
+    }
+    result.calledAt = formatLogTime(result.receivedAt).split('.')[0]
+    result.currentStage = currentRequestStage(result)
+    result.costMs = isRequestComplete(result) ? requestDuration(result).value : null
+    return result
+  }).filter((r) => {
     if (applicant && r.userId !== applicant) return false
     if (request && r.requestId !== request) return false
     if (requestIds.length && !requestIds.includes(r.requestId)) return false
@@ -361,8 +414,8 @@ function filterLogs(list, { startTime, endTime, userId = '', requestId = '', req
  *
  * ⚠ 同 filterLogs：时间维度按 'YYYY-MM-DD HH:mm:ss' 字符串比较，格式不符会静默过滤为空。
  */
-function filterAudits(list, { startTime, endTime, operator, action, result } = {}) {
-  return list.filter((r) => {
+function filterAudits(list, { startTime, endTime, operator, action, result, sortOrder = 'descending' } = {}) {
+  const filtered = list.filter((r) => {
     if (startTime && r.operatedAt < startTime) return false
     if (endTime && r.operatedAt > endTime) return false
     if (operator?.trim() && r.operator !== operator.trim()) return false
@@ -370,6 +423,13 @@ function filterAudits(list, { startTime, endTime, operator, action, result } = {
     if (result && r.result !== result) return false
     return true
   }).map(row => ({ ...row, action: normalizeAuditAction(row.action) }))
+  const direction = sortOrder === 'ascending' ? 1 : -1
+  return filtered.sort((a, b) => {
+    const first = Date.parse(a.operatedAt), second = Date.parse(b.operatedAt)
+    if (!Number.isFinite(first)) return Number.isFinite(second) ? 1 : String(a.id).localeCompare(String(b.id))
+    if (!Number.isFinite(second)) return -1
+    return (first - second || a.id - b.id) * direction
+  })
 }
 
 /**

@@ -1,4 +1,4 @@
-/** 预置入库来自可查询的成功注册请求，默认演示列表不追加这些历史请求。 */
+/** 预置入库来自默认业务快照中的成功注册请求。 */
 import { MULTI_CANDIDATE_CASES } from '@/mock/identification'
 import { FINGER_POSITIONS } from '@/constants/applicant'
 import { buildLogRecords } from '@/mock/logs'

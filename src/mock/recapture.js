@@ -1,4 +1,4 @@
-/** 独立验收数据，不追加到默认 15 条日志；用于验证同一用户整人重采。 */
+/** 构建单人重采验收的数据，也作为文档中三人重采样例的模板。 */
 import { buildLogRecords } from '@/mock/logs'
 import { projectRequest } from '@/utils/log'
 import { FINGER_POSITIONS } from '@/constants/applicant'

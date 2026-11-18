@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { useNavigationStore } from '@/stores/navigation'
 import { ROLE, ROLE_LABEL, PERMISSION, canResetAccountPassword, canDeleteAccount, canChangeAccountRole, canToggleAccountEnabled } from '@/constants/roles'
 import { buildConfirmationMessage } from '@/utils/confirmation'
 import { optionalAccountFields } from '@/utils/account'
@@ -12,6 +13,7 @@ import { useRecordsTable } from '@/composables/useRecordsTable'
 import RecordsFooter from '@/components/RecordsFooter.vue'
 
 const auth = useAuthStore()
+const navigation = useNavigationStore()
 const router = useRouter()
 const canManage = computed(() => auth.hasPermission(PERMISSION.ACCOUNT_MANAGE))
 const loading = ref(false)
@@ -20,8 +22,10 @@ const error = ref('')
 const rows = ref([])
 const { tableRef, tableMaxHeight } = useRecordsTable(rows)
 const total = ref(0)
-const query = ref({ page: 1, pageSize: 10, keyword: '' })
+const query = ref({ page: 1, pageSize: navigation.getPageSize('accounts'), keyword: '' })
+const appliedQuery = ref(null)
 let requestSequence = 0
+onBeforeUnmount(() => { requestSequence++ })
 
 const dialogVisible = ref(false)
 const dialogMode = ref('create')
@@ -40,15 +44,21 @@ const roleOptions = [ROLE.ADMIN, ROLE.OPERATOR].map(value => ({ value, label: RO
 const credentialVisible = ref(false)
 const credential = ref({ title: '', username: '', password: '' })
 
-async function load() {
+async function load(params) {
+  const snapshot = { ...(params || query.value) }
   const requestId = ++requestSequence
   loading.value = true
   error.value = ''
   try {
-    const result = await api.listAccounts({ ...query.value })
+    const result = await api.listAccounts(snapshot)
     if (requestId !== requestSequence) return
     rows.value = result.items
     total.value = result.total
+    appliedQuery.value = snapshot
+    query.value.page = snapshot.page
+    query.value.pageSize = snapshot.pageSize
+    navigation.setPageSize('accounts', snapshot.pageSize)
+    return result
   } catch (e) {
     if (requestId !== requestSequence) return
     rows.value = []
@@ -60,25 +70,22 @@ async function load() {
 }
 
 function search() {
-  query.value.page = 1
-  load()
+  return load({ ...query.value, page: 1 })
 }
 
 function changePage(page) {
-  query.value.page = page
-  load()
+  if (appliedQuery.value && page !== appliedQuery.value.page) return load({ ...appliedQuery.value, page })
 }
 
 function changePageSize(pageSize) {
-  query.value.pageSize = pageSize
-  search()
+  return load({ ...(appliedQuery.value || query.value), page: 1, pageSize })
 }
 
 async function reloadAfterWrite() {
-  await load()
-  if (!error.value && !rows.value.length && total.value > 0 && query.value.page > 1) {
-    query.value.page = Math.ceil(total.value / query.value.pageSize)
-    await load()
+  const snapshot = { ...(appliedQuery.value || query.value) }
+  const result = await load(snapshot)
+  if (result && !result.items.length && result.total > 0 && snapshot.page > 1) {
+    await load({ ...snapshot, page: Math.ceil(result.total / snapshot.pageSize) })
   }
 }
 
@@ -294,7 +301,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
-      <RecordsFooter :current-page="query.page" :page-size="query.pageSize" :total="total" :page-sizes="[10, 20, 50]" @update:current-page="changePage" @update:page-size="changePageSize" />
+      <RecordsFooter :current-page="appliedQuery?.page || 1" :page-size="appliedQuery?.pageSize || query.pageSize" :total="total" @update:current-page="changePage" @update:page-size="changePageSize" />
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="dialogMode === 'create' ? '新建账户' : '编辑账户'" width="460px" :close-on-click-modal="!saving" :show-close="!saving" :close-on-press-escape="!saving" @closed="form = emptyForm()">

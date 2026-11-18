@@ -53,7 +53,7 @@ function eventDescription(event) {
             <span class="event-node" aria-hidden="true" />
             <div class="event-content"><h4>业务处理</h4>
               <div v-for="execution in processing" :key="execution.executionId" class="processing-execution" :data-event-id="execution.end?.id || execution.start?.id" :data-event-start-id="execution.start?.id" :class="{ 'focused-event': focused(execution.start, execution.end) }">
-                <div class="event-heading"><strong v-if="processing.length > 1">{{ execution.executionId }}</strong><el-tag size="small" :type="execution.end?.status === 'FAILED' ? 'danger' : execution.end ? 'success' : 'info'">{{ execution.end ? EVENT_STATUS_LABEL[execution.end.status] : '处理中' }}</el-tag></div>
+                <div class="event-heading"><strong v-if="processing.length > 1">{{ execution.executionId }}</strong><el-tag size="small" :type="execution.end?.status === 'FAILED' ? 'danger' : execution.end ? 'success' : 'primary'">{{ execution.end ? EVENT_STATUS_LABEL[execution.end.status] : '处理中' }}</el-tag></div>
                 <p>开始 {{ formatLogTime(execution.start?.at) }}</p><p>结束 {{ formatLogTime(execution.end?.at) }}</p>
                 <p v-if="execution.end?.errorCode || execution.start?.errorCode">错误码：<code>{{ execution.end?.errorCode || execution.start?.errorCode }}</code></p>
                 <p v-if="eventDescription(execution.end) || eventDescription(execution.start)">{{ eventDescription(execution.end) || eventDescription(execution.start) }}</p>
@@ -99,7 +99,7 @@ function eventDescription(event) {
 .needs-attention > .stage-toggle { background: #fffbf5; }.stage-toggle:hover { background: #eef3fb; }
 .stage-heading { display: flex; align-items: center; gap: 8px; }.stage-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }
 .stage-state { flex-shrink: 0; min-width:64px; justify-content:center; }.stage-chevron.expanded { transform: rotate(90deg); }
-.stage-duration { color: var(--el-text-color-regular); font-size: 12px; white-space: nowrap; width:72px; text-align:right; flex-shrink:0; }.stage-events { padding: 12px 0 14px 10px; border-top: 0; }
+.stage-duration { color: var(--el-text-color-regular); font-size: 12px; white-space: nowrap; min-width:72px; text-align:right; flex-shrink:0; font-variant-numeric: tabular-nums; }.stage-events { padding: 12px 0 14px 10px; border-top: 0; }
 .event-timeline { margin: 0; padding: 0; list-style: none; }
 .event-entry { display: grid; grid-template-columns: 94px 14px minmax(0,1fr); column-gap: 10px; position: relative; padding-bottom: 22px; }
 .event-entry:last-child { padding-bottom: 0; }
@@ -111,7 +111,7 @@ function eventDescription(event) {
 .event-entry[data-event-status="FAILED"] > .event-node { background: var(--el-color-danger); }
 .event-content { min-width: 0; }.event-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; font-size: 13px; }
 .event-attempt, .event-note { color: var(--abis-muted); font-size: 11px; overflow-wrap: anywhere; }
-p { margin: 6px 0 0; overflow-wrap: anywhere; color: var(--abis-muted); font-size: 12px; line-height: 1.8; }
+p { margin: 6px 0 0; overflow-wrap: anywhere; color: var(--abis-muted); font-size: 13px; line-height: 1.8; }
 code { color: var(--el-text-color-regular); overflow-wrap: anywhere; }h4 { margin: 0 0 10px; color: var(--el-text-color-primary); font-size: 14px; }
 .processing-execution + .processing-execution { margin-top: 14px; }.late-event { color: var(--el-color-warning); }
 .stage-metadata { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 16px; font-size: 11px; line-height: 1.8; color: var(--abis-muted); }.stage-bounds { min-width: 0; overflow-wrap: anywhere; }
@@ -122,7 +122,7 @@ code { color: var(--el-text-color-regular); overflow-wrap: anywhere; }h4 { margi
 .compact-stage .stage-name { font-size: 13px; }
 .compact-stage > .stage-events { margin-top: 14px; padding: 0 0 0 8px; border-top: 0; }
 @media(max-width:600px) {
-  .stage-toggle { padding: 9px 0; }.stage-events { padding: 12px 0; }.stage-state { min-width:52px; }.stage-duration { width:55px; }
+  .stage-toggle { padding: 9px 0; }.stage-events { padding: 12px 0; }.stage-state { min-width:52px; }.stage-duration { min-width:55px; }
   .event-entry { grid-template-columns: 82px 10px minmax(0,1fr); column-gap: 7px; }.event-entry::before { left: 93.5px; }
   .event-time { font-size: 10px; }.stage-name { font-size: 13px; }.compact-stage > .stage-events { padding-left: 0; }
   .compact-stage .event-entry { grid-template-columns: minmax(0,1fr); row-gap: 6px; padding-left: 10px; }
