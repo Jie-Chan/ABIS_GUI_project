@@ -31,7 +31,7 @@ const settingsPages = new Set(['threshold', 'accounts'])
 const primaryNavItems = computed(() => navItems.value.filter((item) => !settingsPages.has(item.name) && !monitorPages.has(item.name)))
 const settingsNavItems = computed(() => navItems.value.filter((item) => settingsPages.has(item.name)))
 const isSettingsPage = computed(() => settingsPages.has(route.name))
-const isRecordsPage = computed(() => ['applicants', 'logs', 'audits', 'accounts'].includes(route.name))
+const isRecordsWorkspace = computed(() => ['applicants', 'logs', 'audits', 'accounts', 'host-resources'].includes(route.name))
 
 const currentTitle = computed(() => route.meta.title || '')
 const roleLabel = computed(() => ROLE_LABEL[auth.role] || '角色未识别')
@@ -109,7 +109,7 @@ async function handleLogout() {
       </div>
     </el-header>
 
-    <el-main class="workspace-main" :class="{ 'records-workspace': isRecordsPage }">
+    <el-main class="workspace-main" :class="{ 'records-workspace': isRecordsWorkspace }">
       <div v-if="!['logs', 'applicants', 'monitor', 'host-resources', 'audits', 'accounts', 'threshold', 'recapture-acceptance'].includes(route.name)" class="page-intro">
         <span class="page-icon"><UiIcon :name="route.name" :size="25" /></span>
         <div>
@@ -146,7 +146,7 @@ async function handleLogout() {
 .avatar { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; color: #3268e8; background: #edf2ff; font-weight: 600; }
 .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-role { color: #acbdd4; }
-.workspace-main { --abis-workspace-top: 32px; width: 100%; min-width: 0; padding: 32px 48px 48px; overflow: visible; }
+.workspace-main { --abis-workspace-top: 32px; --abis-workspace-bottom: 48px; width: 100%; min-width: 0; padding: var(--abis-workspace-top) 48px var(--abis-workspace-bottom); overflow: visible; }
 .page-intro { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .page-intro > div { min-width: 0; }
 .page-icon { display: grid; place-items: center; width: 50px; height: 50px; flex-shrink: 0; border: 1px solid #d5e2f4; border-radius: 12px; background: #e9f0fb; color: var(--el-color-primary); }
@@ -159,7 +159,7 @@ async function handleLogout() {
   .primary-navigation :deep(.settings-chevron) { display: inline-block; }
   .user { gap: 10px; }
   .user-role { display: none; }
-  .workspace-main { --abis-workspace-top: 28px; padding: 28px; }
+  .workspace-main { --abis-workspace-top: 28px; --abis-workspace-bottom: 28px; padding-inline: 28px; }
 }
 @media (max-width: 1200px) {
   .header { display: flex; height: auto; min-height: 72px; flex-wrap: wrap; gap: 0 20px; padding: 16px 24px 0; }
@@ -171,6 +171,15 @@ async function handleLogout() {
   .settings-trigger { height: 48px; }
   .primary-navigation :deep(.ui-icon) { display: inline-block; width: 17px; }
 }
+@media (max-width: 767px) {
+  .primary-navigation { justify-content: flex-start; flex-wrap: nowrap; overflow: visible; }
+  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-inline: 8px; gap: 6px; font-size: 14px; }
+  .primary-navigation :deep(.ui-icon) { display: none; }
+  .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }
+  .settings-label { display: none; }
+  .more-label,.nav-section-current { display: inline; }
+  .nav-section-current { font-size: 12px; }
+}
 @media (max-width: 600px) {
   .header { padding: 16px 16px 0; gap: 0 10px; }
   .brand { gap: 8px; }
@@ -179,25 +188,15 @@ async function handleLogout() {
   .brand :deep(.brand-mark) { width: 24px; height: 24px; }
   .user { gap: 8px; }
   .account-trigger { gap: 7px; padding: 4px; }
-  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-left: 12px; padding-right: 12px; gap: 6px; font-size: 14px; }
-  .primary-navigation :deep(.ui-icon) { display: none; }
-  .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }
-  .workspace-main { --abis-workspace-top: 22px; padding: 22px 16px; }
+  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-inline: clamp(3px, 1vw, 6px); gap: 4px; font-size: clamp(12px, 3.6vw, 14px); }
+  .nav-section-current { display: none; }
+  .workspace-main { --abis-workspace-top: 22px; --abis-workspace-bottom: 22px; padding-inline: 16px; }
   .page-intro h1 { font-size: 23px; }
   .page-intro p { font-size: 12px; }
   .page-intro { gap: 12px; margin-bottom: 20px; }
   .page-icon { width: 42px; height: 42px; border-radius: 10px; }
 }
-@media (max-width: 767px) {
-  .primary-navigation { justify-content: flex-start; flex-wrap: wrap; overflow: visible; }
-  .primary-navigation :deep(.el-menu-item), .settings-trigger { padding-inline: 8px; gap: 6px; font-size: 14px; }
-  .primary-navigation :deep(.ui-icon) { display: none; }
-  .primary-navigation :deep(.settings-chevron) { display: inline-block; width: 12px; }
-  .settings-label { display: none; }
-  .more-label,.nav-section-current { display: inline; }
-  .nav-section-current { font-size: 12px; }
-}
-.workspace-main.records-workspace { --abis-workspace-top: 12px; padding-top: var(--abis-workspace-top); }
+.workspace-main.records-workspace { --abis-workspace-top: 12px; }
 @media (max-width: 767px) {
   .workspace-main.records-workspace { --abis-workspace-top: 8px; }
 }

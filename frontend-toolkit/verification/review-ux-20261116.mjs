@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { stubHostOverview } from './host-overview-fixture.mjs'
 
 const base = new URL(process.env.ABIS_PREVIEW_URL || 'http://127.0.0.1:5186').origin
 const out = process.env.ABIS_QA_OUTPUT_DIR || fileURLToPath(new URL('./qa-output/ux-review-20261116/', import.meta.url))
@@ -10,13 +11,14 @@ await fs.rm(`${out}/failure.png`, { force: true })
 const browser = await chromium.launch()
 const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] })
 const page = await context.newPage()
+const overviewEndpoint = await stubHostOverview(page, base)
 page.setDefaultTimeout(10000)
 const checks = [], measurements = [], errors = [], backendRequests = [], sessions = []
 let failure = null
 function observe(p) {
   p.on('pageerror', e => errors.push(e.message))
   p.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
-  p.on('request', request => { const url = new URL(request.url()); if (['fetch','xhr'].includes(request.resourceType()) && (url.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(url.pathname))) backendRequests.push(request.url()) })
+  p.on('request', request => { const url = new URL(request.url()); if (['fetch','xhr'].includes(request.resourceType()) && request.url() !== overviewEndpoint && (url.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(url.pathname))) backendRequests.push(request.url()) })
 }
 observe(page)
 const pass = label => { checks.push(label); console.log('PASS', label) }
@@ -163,9 +165,10 @@ try {
   pass('login audits present allowed failure category or unrecorded next to result while threshold before/after values stay side by side')
 
   await page.setViewportSize({ width: 1280, height: 360 }); await go('/monitor')
-  for (const [label, instance, host] of [['异常', 'face-1', '算法 VM 1'], ['未知', 'minio-1', 'MinIO VM']]) {
+  for (const [label, instance, host] of [['异常', 'face-1', 'algorithm-vm-1'], ['未知', 'minio-1', 'minio-vm']]) {
     await button(label).click(); const original = await page.locator('.instance-row').count(); assert.equal(original, 1)
-    const row = page.locator(`[data-instance="${instance}"]`); await row.getByRole('link', { name: '查看主机资源', exact: true }).scrollIntoViewIfNeeded(); await paint(); const monitorScroll = await page.evaluate(() => window.scrollY); assert.ok(monitorScroll > 0); await row.getByRole('link', { name: '查看主机资源', exact: true }).click(); await page.waitForURL('**/host-resources?**'); await loaded(); assert.match(await page.locator('.host-resources .el-table__row.located-host').innerText(), new RegExp(host))
+    const row = page.locator(`[data-instance="${instance}"]`); await row.getByRole('link', { name: '查看主机资源', exact: true }).scrollIntoViewIfNeeded(); await paint(); const monitorScroll = await page.evaluate(() => window.scrollY); assert.ok(monitorScroll > 0); await row.getByRole('link', { name: '查看主机资源', exact: true }).click(); await page.waitForURL(`**/host-resources?hostId=${host}`)
+    await page.locator(`[data-host-id="${host}"].is-located`).getByText('未接入', { exact: true }).waitFor()
     await page.goBack(); await page.waitForURL('**/monitor'); await loaded(); await paint(); assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - monitorScroll) <= 1); assert.equal(await button(label).getAttribute('aria-pressed'), 'true'); assert.equal(await page.locator('.instance-row').count(), original)
     await row.getByRole('link', { name: '查看主机资源', exact: true }).click(); await page.waitForURL('**/host-resources?**'); await loaded(); await button('监控').click(); await page.getByRole('menuitem', { name: '服务状态', exact: true }).click(); await page.waitForURL('**/monitor'); await loaded(); assert.equal(await button(label).getAttribute('aria-pressed'), 'true'); assert.equal(await page.locator('.instance-row').count(), original)
   }

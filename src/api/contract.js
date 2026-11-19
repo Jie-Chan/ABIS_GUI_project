@@ -90,13 +90,26 @@
 
 /**
  * @typedef {Object} HostResourceSample
- * @property {number} cpuPercent
- * @property {number} memoryUsedGiB
- * @property {number} memoryTotalGiB
- * @property {number} diskFreeGiB 业务数据卷剩余容量
- * @property {number} diskTotalGiB
- * @property {string} mount 业务数据卷或挂载点
- * @property {string} collectedAt YYYY-MM-DD HH:mm:ss；独立于服务探测时间
+ * @property {string} collectedAt 带时区的 ISO 8601 采集时间
+ * @property {number|null} cpuPercent
+ * @property {number|null} cpuUserPercent 用户态 CPU 百分比
+ * @property {number|null} cpuSystemPercent 内核态 CPU 百分比
+ * @property {number|null} cpuIowaitPercent I/O 等待百分比
+ * @property {number|null} memoryPercent
+ * @property {number|null} memoryUsedGiB
+ * @property {number|null} memoryTotalGiB
+ * @property {number|null} memoryCacheGiB 内存缓冲与缓存
+ * @property {number|null} swapUsedGiB
+ * @property {number|null} swapTotalGiB
+ * @property {number|null} diskPercent Agent 主文件系统使用率
+ * @property {number|null} diskUsedGiB Agent 主文件系统已用容量
+ * @property {number|null} diskTotalGiB
+ * @property {number|null} diskReadBps
+ * @property {number|null} diskWriteBps
+ * @property {number|null} diskReadLatencyMs 平均读取等待时间，单位 ms
+ * @property {number|null} diskWriteLatencyMs 平均写入等待时间，单位 ms
+ * @property {number|null} netRxBps
+ * @property {number|null} netTxBps
  */
 
 /**
@@ -243,7 +256,7 @@
  * @property {() => Promise<{face: number, finger: number}>} getThresholds
  * @property {(payload: {face?: number, finger?: number}) => Promise<{face: number, finger: number}>} updateThresholds
  * @property {() => Promise<{items: MonitorItem[], fetchedAt: string}>} getHealth
- * @property {() => Promise<{items: Array<MonitorHost & {sample: HostResourceSample|null}>}>} getHostResources 无资源样本不影响服务状态
+ * @property {(options?: {range?: '1h'|'12h'|'24h'|'1w'|'30d', signal?: AbortSignal}) => Promise<{items: Array<MonitorHost & {sample: HostResourceSample|null, history: HostResourceSample[], sampleError?: boolean, historyError?: boolean}>, windowEnd?: string|null}>} getHostResources sample 始终为最近一小时的最新分钟点。history 为所选范围的升序记录。错误标记区分查询失败与成功空窗，Mock 从响应 Date 取窗口终点
  * @property {() => Promise<{scenario: RecaptureScenario, userId: string}>} getRecaptureScenario 仅 Mock；HTTP 适配器明确拒绝
  * @property {(scenario: RecaptureScenario) => Promise<{scenario: RecaptureScenario, userId: string}>} setRecaptureScenario 仅 Mock，切换当前会话的共享业务快照，default 恢复完整的默认快照
  * @property {(params?: LogQueryParams) => Promise<{total: number, items: LogRecord[], serverTime: string}>} listLogs serverTime 为本次响应计算使用的带时区 ISO 8601 服务端时间；未结束请求以此校准并用 performance.now() 累计

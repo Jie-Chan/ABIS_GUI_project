@@ -7,7 +7,7 @@
 import { mockAccounts, mockCredentials } from '@/mock/accounts'
 import { mockThresholds } from '@/mock/thresholds'
 import { buildMonitorSnapshot } from '@/mock/monitor'
-import { buildHostResources } from '@/mock/hosts'
+import { DEFAULT_HOST_RESOURCE_RANGE, HOST_RESOURCES_PATH, HOST_RESOURCE_HOSTS } from '@/constants/hostResources'
 import { buildRecaptureLogs, buildDocumentRecaptureLogs } from '@/mock/recapture'
 import { buildEnrollmentSubjects } from '@/mock/applicants'
 import { buildBusinessSnapshot } from '@/mock/business'
@@ -23,6 +23,7 @@ import { latestEnrollmentRecord } from '@/utils/applicant'
 import { ROLE, PERMISSION, hasPermission, canResetAccountPassword, canDeleteAccount, canChangeAccountRole, canToggleAccountEnabled } from '@/constants/roles'
 
 // —— 可变状态：模块加载时克隆一份，使增删改在会话内可见 ——
+const resourceHostIds = new Set(HOST_RESOURCE_HOSTS.map(host => host.id))
 let accounts = mockAccounts.map((a) => ({ ...a }))
 let thresholds = { ...mockThresholds }
 let nextAccountId = accounts.length + 1
@@ -242,10 +243,19 @@ export default {
     return buildMonitorSnapshot()
   },
 
-  async getHostResources() {
-    await delay()
+  async getHostResources({ range = DEFAULT_HOST_RESOURCE_RANGE, signal } = {}) {
     if (!hasPermission(currentAccount().role, PERMISSION.MONITOR_VIEW)) throw new Error('没有监控查看权限')
-    return buildHostResources()
+    const path = range === DEFAULT_HOST_RESOURCE_RANGE ? HOST_RESOURCES_PATH : `${HOST_RESOURCES_PATH}?${new URLSearchParams({ range })}`
+    const response = await fetch(path, { signal, headers: { Accept: 'application/json' } })
+    const json = response.headers.get('Content-Type')?.includes('application/json') ? await response.json() : null
+    const items = json?.items
+    const valid = Array.isArray(items) && items.every(item => resourceHostIds.has(item?.id)
+      && Array.isArray(item.history) && (item.sample === null || typeof item.sample?.collectedAt === 'string'))
+    if (!valid || new Set(items.map(item => item.id)).size !== items.length) throw new Error('读取主机资源失败')
+    const mappedFailure = [502, 503].includes(response.status) && items.length
+      && items.every(item => item.sampleError && item.historyError)
+    if (!response.ok && !mappedFailure) throw new Error('读取主机资源失败')
+    return { items, windowEnd: response.headers.get('Date') }
   },
   async getRecaptureScenario() { currentAccount(); return { scenario: recaptureScenario, userId: recaptureScenario.startsWith('document-') ? '' : 'U900' } },
   async setRecaptureScenario(scenario) {

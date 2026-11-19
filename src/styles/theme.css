@@ -7,6 +7,10 @@
   --abis-navy: #17263c;
   --abis-muted: #536784;
   --abis-border: #e5eaf2;
+  --abis-table-header-bg: #f5f7fb;
+  --abis-table-header-text: #65748c;
+  --abis-table-border: #e9edf4;
+  --abis-table-cell-padding: 16px;
   --el-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
   --el-color-primary: #3268e8;
   --el-color-primary-light-3: #7095ef;
@@ -55,10 +59,10 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .abis-shell .el-card { border: 1px solid var(--abis-border); border-radius: 8px; box-shadow: 0 2px 8px rgb(26 48 81 / 2%); }
 .abis-shell .el-card__header { padding: 20px 24px; font-weight: 600; font-size: 16px; border-color: var(--abis-border); }
 .abis-shell .el-card__body { padding: 24px; }
-.abis-shell .el-table { --el-table-header-bg-color: #f5f7fb; --el-table-header-text-color: #65748c; --el-table-border-color: #e9edf4; --el-table-row-hover-bg-color: #f7f9fd; color: #28394f; font-size: 13px; }
+.abis-shell .el-table { --el-table-header-bg-color: var(--abis-table-header-bg); --el-table-header-text-color: var(--abis-table-header-text); --el-table-border-color: var(--abis-table-border); --el-table-row-hover-bg-color: #f7f9fd; color: #28394f; font-size: 13px; }
 .abis-shell .el-table th.el-table__cell { height: 46px; font-size: 12px; font-weight: 600; }
 .abis-shell .el-table td.el-table__cell { padding: 14px 0; }
-.abis-shell .el-table .cell { padding-left: 16px; padding-right: 16px; }
+.abis-shell .el-table .cell { padding-inline: var(--abis-table-cell-padding); }
 .abis-shell .el-table--border::after, .abis-shell .el-table--border::before { display: none; }
 .abis-shell .el-table--border .el-table__cell { border-right: none; }
 .abis-shell .el-table__empty-block { min-height: 160px; }
@@ -90,6 +94,8 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .el-message-box__message .confirmation-details p { margin: 4px 0 0; }
 
 @media (max-width: 767px) {
+  html:has(.console-layout) { scrollbar-gutter: stable; }
+  body:has(.console-layout) { min-width: 0; }
   .abis-shell .el-card__body { padding: 16px; }
   .abis-shell .el-card__header { padding: 16px; }
   .abis-shell .filters { gap: 0 12px; }

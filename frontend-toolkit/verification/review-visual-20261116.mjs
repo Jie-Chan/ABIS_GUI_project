@@ -2,17 +2,19 @@ import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { stubHostOverview } from './host-overview-fixture.mjs'
 
 const base = new URL(process.env.ABIS_PREVIEW_URL || 'http://127.0.0.1:5186').origin
 const out = process.env.ABIS_QA_OUTPUT_DIR || fileURLToPath(new URL('./qa-output/visual-20261116/', import.meta.url))
 await fs.mkdir(out, { recursive: true }); await fs.rm(`${out}/failure.png`, { force: true })
 const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1280, height: 720 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce' })
+const overviewEndpoint = await stubHostOverview(page, base)
 page.setDefaultTimeout(10000)
 const checks = [], contrasts = [], measurements = [], errors = [], backendRequests = []
 let failure = null
 page.on('pageerror', e => errors.push(e.message))
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
-page.on('request', r => { const u = new URL(r.url()); if (['xhr','fetch'].includes(r.resourceType()) && (u.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(u.pathname))) backendRequests.push(r.url()) })
+page.on('request', r => { const u = new URL(r.url()); if (['xhr','fetch'].includes(r.resourceType()) && r.url() !== overviewEndpoint && (u.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(u.pathname))) backendRequests.push(r.url()) })
 const button = name => page.getByRole('button', { name, exact: true })
 const loaded = () => page.waitForFunction(() => {
   const views = { monitor: '.monitor-page', logs: '.logs-page', audits: '.audit-page', applicants: '.applicants-page', threshold: '.threshold-page', accounts: '.account-page', 'host-resources': '.host-resources' }
@@ -94,13 +96,20 @@ try {
   const mobileAction=await row('REQ-00000015').getByRole('button',{name:'详情',exact:true}).boundingBox(); for(const label of ['请求 ID','执行状态','响应发布状态']) {const c=await cell('REQ-00000015',label),b=await c.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=mobileAction.x+1)}
   await nav.getByRole('button',{name:'更多',exact:true}).click(); await page.getByRole('menuitem',{name:'匹配阈值配置',exact:true}).click(); await page.waitForURL('**/threshold'); await settle(); assert.equal(await nav.locator('.settings-trigger.is-active').count(),1)
   await nav.getByRole('button',{name:/^更多/}).click(); await page.getByRole('menuitem',{name:'账户管理',exact:true}).click(); await page.waitForURL('**/accounts'); await settle(); assert.equal(await nav.locator('.settings-trigger.is-active').count(),1); await go('/logs'); await body().evaluate(n=>{n.scrollLeft=0;n.scrollTop=0}); await paint(); await shot('logs-priority-and-navigation-624')
-  const timeIndex=(await labels()).indexOf('接收时间'); await body().evaluate((n,i)=>{const c=n.querySelector(`tr td:nth-child(${i+1})`);n.scrollLeft=Math.max(0,c.offsetLeft-20)},timeIndex); await paint(); await table().locator('th.is-sortable .sort-caret.ascending').click(); await settle(); assert.equal(await table().locator('th[aria-sort="ascending"]').count(),1); assert.match(await table().locator('.el-table__row').first().innerText(),/REQ-00000001/)
+  const oldestRequestId = await page.evaluate(async () => {
+    const api = (await import('/src/api/index.js')).default
+    const { items } = await api.listLogs({ pageSize: 1, sortOrder: 'ascending' })
+    return items[0].requestId
+  })
+  const timeIndex=(await labels()).indexOf('接收时间'); await body().evaluate((n,i)=>{const c=n.querySelector(`tr td:nth-child(${i+1})`);n.scrollLeft=Math.max(0,c.offsetLeft-20)},timeIndex); await paint(); await table().locator('th.is-sortable .sort-caret.ascending').click(); await settle(); assert.equal(await table().locator('th[aria-sort="ascending"]').count(),1); assert.ok((await table().locator('.el-table__row').first().innerText()).includes(oldestRequestId))
   await visible(table().locator('.el-table__row').first().getByRole('button',{name:'详情',exact:true})); pass('624 navigation uses More without horizontal scrolling; key states/details show initially and scrolled receipt sorting still works')
 
   await page.setViewportSize({width:1280,height:720}); await go('/monitor'); await button('全部').click(); await settle()
   for(const id of ['face-1','minio-1']) { const instance=page.locator(`[data-instance="${id}"]`), reason=instance.locator('.probe-reason'), tag=instance.locator('.instance-state'), link=instance.getByRole('link',{name:'查看主机资源',exact:true}), cause=await contrast(reason,`monitor ${id} diagnosis`); assert.ok(parseFloat(cause.fontSize)>=13); await contrast(tag,`monitor ${id} state`); await contrast(link,`monitor ${id} resource link`); assert.equal(await instance.locator('.probe-meta').count(),0); assert.equal(await reason.innerText(),id==='face-1'?'服务未响应':'原因未记录'); assert.equal(await reason.locator('xpath=..').evaluate(n=>n.contains(n.querySelector('a'))&&n.contains(n.querySelector('.instance-state'))),true); if(id==='face-1'){await visible(reason);await visible(link)} }
-  await contrast(page.locator('[data-instance="system-1"] .instance-state'),'monitor normal'); await page.locator('[data-instance="face-1"]').getByRole('link',{name:'查看主机资源',exact:true}).click(); await page.waitForURL('**/host-resources?**'); await settle(); assert.match(await page.locator('.located-host').innerText(),/算法 VM 1/); await go('/monitor'); await shot('monitor-diagnostics-1280')
-  pass('monitor status/reason/resource link share a diagnostic cluster, causes are 13px with sufficient contrast, and host highlighting still works')
+  await contrast(page.locator('[data-instance="system-1"] .instance-state'),'monitor normal'); await page.locator('[data-instance="face-1"]').getByRole('link',{name:'查看主机资源',exact:true}).click(); await page.waitForURL('**/host-resources?hostId=algorithm-vm-1')
+  await page.locator('[data-host-id="algorithm-vm-1"].is-located').getByText('未接入', { exact: true }).waitFor()
+  await go('/monitor'); await shot('monitor-diagnostics-1280')
+  pass('monitor status/reason/resource link share a diagnostic cluster, causes are 13px with sufficient contrast, and the VM link locates its unconnected row')
 
   await go('/audits'); for(const state of ['成功','失败']) {const tag=table().locator('.el-tag').filter({hasText:new RegExp(`^${state}$`)}).first();await contrast(tag,`audit ${state}`);await tag.hover();await paint();await contrast(tag,`audit hovered ${state}`)}
   await go('/accounts'); for(const state of ['启用','禁用']) {const tag=table().locator('.el-tag').filter({hasText:new RegExp(`^${state}$`)}).first();await contrast(tag,`account ${state}`);await tag.hover();await paint();await contrast(tag,`account hovered ${state}`)}

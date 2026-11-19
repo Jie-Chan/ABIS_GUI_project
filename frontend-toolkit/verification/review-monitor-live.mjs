@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { stubHostOverview } from './host-overview-fixture.mjs'
 
 const base = new URL(process.env.ABIS_PREVIEW_URL || 'http://127.0.0.1:5186').origin
 const out = process.env.ABIS_QA_OUTPUT_DIR || fileURLToPath(new URL('./qa-output/monitor-live-20261116/', import.meta.url))
@@ -9,13 +10,14 @@ await fs.mkdir(out, { recursive: true }); await fs.rm(`${out}/failure.png`, { fo
 const browser = await chromium.launch()
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce' })
 const page = await context.newPage()
+const overviewEndpoint = await stubHostOverview(page, base)
 page.setDefaultTimeout(10000)
 const checks = [], measurements = [], errors = [], backendRequests = []
 let failure = null
 function observe(p) {
   p.on('pageerror', e => errors.push(e.message))
   p.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
-  p.on('request', r => { const u = new URL(r.url()); if (['xhr','fetch'].includes(r.resourceType()) && (u.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(u.pathname))) backendRequests.push(r.url()) })
+  p.on('request', r => { const u = new URL(r.url()); if (['xhr','fetch'].includes(r.resourceType()) && r.url() !== overviewEndpoint && (u.origin !== base || /^\/(abis-admin|admin-api)(\/|$)/.test(u.pathname))) backendRequests.push(r.url()) })
 }
 function acceleratePolling() {
   const originalSet = window.setInterval.bind(window), originalClear = window.clearInterval.bind(window), ids = new Set()
@@ -117,11 +119,14 @@ try {
   await page.locator('.monitor-page').evaluate(n => { n.style.width = '' }); await button('异常').click(); await paint(); const one = await page.locator('.service-card').boundingBox(), full = await page.locator('.monitor-page').boundingBox(); assert.ok(Math.abs(one.width-full.width)<=1 && one.height<400); await shot('monitor-filter-single')
   pass('736/560/480 container layouts retain three columns, two-plus-full-width and one column without overflow; a filtered single instance stays naturally sized')
 
-  for (const [label, instance, host] of [['异常','face-1','算法 VM 1'], ['未知','minio-1','MinIO VM']]) {
-    await button(label).click(); await page.locator(`[data-instance="${instance}"]`).getByRole('link',{name:'查看主机资源',exact:true}).click(); await page.waitForURL('**/host-resources?**'); await settle(); assert.match(await page.locator('.located-host').innerText(),new RegExp(host)); await page.goBack(); await page.waitForURL('**/monitor'); await settle(); assert.equal(await button(label).getAttribute('aria-pressed'),'true'); assert.equal(await page.locator(`[data-instance="${instance}"]`).count(),1)
+  for (const [label, instance, host] of [['异常','face-1','algorithm-vm-1'], ['未知','minio-1','minio-vm']]) {
+    await button(label).click(); await page.locator(`[data-instance="${instance}"]`).getByRole('link',{name:'查看主机资源',exact:true}).click(); await page.waitForURL(`**/host-resources?hostId=${host}`); await settle()
+    await page.locator(`[data-host-id="${host}"].is-located`).getByText('未接入', { exact: true }).waitFor()
+    assert.equal(await page.locator('.metric-card').count(), 0)
+    await page.goBack(); await page.waitForURL('**/monitor'); await settle(); assert.equal(await button(label).getAttribute('aria-pressed'),'true'); assert.equal(await page.locator(`[data-instance="${instance}"]`).count(),1)
   }
   await button('全部').click(); assert.equal(await page.locator('.instance-row').count(),10); await page.evaluate(async()=>{(await import('/src/api/index.js')).default.getHealth=window.__liveOriginalHealth})
-  pass('business-diagnostic resource links still highlight the matching VM and browser return preserves abnormal/unknown filters')
+  pass('resource links keep their VM identifiers and browser return preserves abnormal and unknown filters')
   assert.deepEqual(errors, []); assert.deepEqual(backendRequests, []); pass('zero browser errors and zero real-backend calls')
 } catch (error) { failure = { message: error.message, stack: error.stack, url: page.url() }; console.error(error); process.exitCode=1; await shot('failure').catch(()=>{}) }
 finally { await fs.writeFile(`${out}/report.json`,JSON.stringify({base,checks,measurements,errors,backendRequests,failure},null,2)); await browser.close() }

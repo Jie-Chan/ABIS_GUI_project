@@ -1,0 +1,11 @@
+{
+  "hub": {
+    "baseUrl": "http://10.200.51.121:8090",
+    "usernameEnv": "ABIS_BESZEL_USERNAME",
+    "passwordEnv": "ABIS_BESZEL_PASSWORD",
+    "tokenEnv": "ABIS_BESZEL_TOKEN"
+  },
+  "hosts": [
+    { "hostId": "app-1", "systemId": "vgrg02yzsr69lc7" }
+  ]
+}

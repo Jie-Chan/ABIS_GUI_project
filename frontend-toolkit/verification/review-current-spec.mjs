@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import { stubHostOverview } from './host-overview-fixture.mjs'
 
 const base = new URL(process.env.ABIS_PREVIEW_URL || 'http://127.0.0.1:5186').origin
 assert.match(await (await fetch(`${base}/src/api/index.js`)).text(), /"VITE_USE_MOCK": "true"/)
@@ -8,13 +9,14 @@ const out = process.env.ABIS_QA_OUTPUT_DIR || './qa-output/current-spec'
 await fs.mkdir(out, { recursive: true })
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1422, height: 804 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion: 'reduce' })
+const overviewEndpoint = await stubHostOverview(page, base)
 page.setDefaultTimeout(10000)
 const checks = [], errors = [], backendRequests = []
 page.on('pageerror', e => errors.push(e.message))
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
 page.on('request', request => {
   const url = new URL(request.url())
-  if (['xhr', 'fetch'].includes(request.resourceType()) && (url.origin !== base || /^\/(admin-api|abis-admin)(\/|$)/.test(url.pathname))) backendRequests.push(request.url())
+  if (['xhr', 'fetch'].includes(request.resourceType()) && request.url() !== overviewEndpoint && (url.origin !== base || /^\/(admin-api|abis-admin)(\/|$)/.test(url.pathname))) backendRequests.push(request.url())
 })
 const pass = text => { checks.push(text); console.log('PASS', text) }
 const button = name => page.getByRole('button', { name, exact: true })
@@ -244,10 +246,12 @@ try {
   for (const [filter, id, host] of [['异常','face-1','algorithm-vm-1'],['未知','minio-1','minio-vm']]) {
     await button(filter).click(); const instance = page.locator(`[data-instance="${id}"]`); assert.doesNotMatch(await instance.innerText(), /最近探测|健康探测超时/)
     if (id === 'face-1') assert.match(await instance.innerText(), /服务未响应/); else assert.match(await instance.innerText(), /原因未记录/)
-    await instance.getByRole('link', { name: '查看主机资源' }).click(); await page.waitForURL(`**/host-resources?hostId=${host}`); await loaded(); assert.equal(await page.locator('.located-host').count(), 1); assert.match(await page.locator('.located-host').innerText(), host === 'minio-vm' ? /MinIO VM/ : /算法 VM 1/)
+    await instance.getByRole('link', { name: '查看主机资源' }).click(); await page.waitForURL(`**/host-resources?hostId=${host}`); await loaded()
+    await page.locator(`[data-host-id="${host}"].is-located`).getByText('未接入', { exact: true }).waitFor()
+    assert.equal(await page.locator('.metric-card').count(), 0)
     await button('监控').click(); await page.getByRole('menuitem', { name: '服务状态', exact: true }).click(); await loaded()
   }
-  pass('abnormal/unknown probe facts and fallbacks link to and highlight the associated host')
+  pass('abnormal and unknown diagnostics keep their original host links and locate their unconnected VM rows')
 
   await button('设置').click(); await page.getByRole('menuitem', { name: '匹配阈值配置', exact: true }).click(); await loaded()
   const fields = page.locator('.threshold-field input'), save = button('保存修改')
